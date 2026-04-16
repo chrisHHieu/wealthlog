@@ -1,8 +1,10 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
-# dependencies
-/node_modules
-/.pnp
+# ===================================
+# Node / Frontend
+# ===================================
+node_modules/
+.pnp
 .pnp.*
 .yarn/*
 !.yarn/patches
@@ -10,32 +12,77 @@
 !.yarn/releases
 !.yarn/versions
 
-# testing
-/coverage
+# Next.js
+.next/
+out/
+build/
+dist/
 
-# next.js
-/.next/
-/out/
+# Typescript
+*.tsbuildinfo
+next-env.d.ts
 
-# production
-/build
-
-# misc
-.DS_Store
-*.pem
-
-# debug
+# Debug
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# Testing
+coverage/
 
-# vercel
+# Vercel
 .vercel
 
-# typescript
-*.tsbuildinfo
-next-env.d.ts
+# ===================================
+# Python / Backend
+# ===================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Testing/Cache
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.ruff_cache/
+.mypy_cache/
+
+# ===================================
+# Database & Backup
+# ===================================
+*.db
+*.db.bak
+backup/*.sql
+backup/*.dump
+
+# ===================================
+# Environment Variables
+# ===================================
+.env*
+!.env.example
+
+# ===================================
+# IDE & Editors
+# ===================================
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+
+# ===================================
+# OS & Misc
+# ===================================
+.DS_Store
+Thumbs.db
+*.pem
+*.log

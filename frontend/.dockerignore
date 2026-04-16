@@ -1,0 +1,8 @@
+node_modules
+.next
+.env*
+backend
+*.db
+*.db.bak
+.claude
+.git

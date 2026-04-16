@@ -1,237 +1,307 @@
-Đây là prompt được viết lại, tối ưu cho Claude Code để build trực tiếp — bao gồm tech stack đầy đủ và loại bỏ yêu cầu về tablet/mobile như bạn muốn:
+# 💎 WealthLog — Quản Lý Tài Chính Cá Nhân
+
+<p align="center">
+  <img src="https://img.shields.io/badge/Frontend-Next.js_16-000000?style=for-the-badge&logo=nextdotjs" alt="Next.js"/>
+  <img src="https://img.shields.io/badge/Backend-FastAPI-009688?style=for-the-badge&logo=fastapi" alt="FastAPI"/>
+  <img src="https://img.shields.io/badge/Database-PostgreSQL_16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL"/>
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker"/>
+</p>
+
+> Ứng dụng quản lý tài chính cá nhân **full-stack** với giao diện Luxury Fintech, hỗ trợ theo dõi chi tiêu, ngân sách, mục tiêu tiết kiệm, đầu tư và phân tích tài chính theo quy tắc 50/30/20.
 
 ---
 
-# Personal Finance Manager — Full-Stack Web App
+## 📋 Mục Lục
 
-## 🎯 MỤC TIÊU DỰ ÁN
-
-Xây dựng ứng dụng web quản lý tài chính cá nhân (Personal Finance Manager) — dùng riêng cho một người, không phải sản phẩm thương mại. Thiết kế đầy đủ, chuyên nghiệp, hiện đại theo phong cách **"Luxury Fintech"**.
+- [Tổng Quan](#-tổng-quan)
+- [Tính Năng](#-tính-năng)
+- [Kiến Trúc](#-kiến-trúc)
+- [Tech Stack](#-tech-stack)
+- [Cài Đặt & Khởi Chạy](#-cài-đặt--khởi-chạy)
+- [Cấu Trúc Thư Mục](#-cấu-trúc-thư-mục)
+- [Tài Liệu Chi Tiết](#-tài-liệu-chi-tiết)
 
 ---
 
-## 🛠️ TECH STACK
+## 🌟 Tổng Quan
+
+**WealthLog** là ứng dụng quản lý tài chính cá nhân được thiết kế dành riêng cho người dùng Việt Nam, với:
+
+- Giao diện **Luxury Fintech** — Dark/Light mode, glassmorphism, micro-animations
+- Backend **async** hiệu năng cao với FastAPI + SQLAlchemy 2.0
+- Database **PostgreSQL 16** với auto-migration qua Alembic
+- Deploy dễ dàng bằng **Docker Compose** (one-command setup)
+- Ngôn ngữ giao diện: **Tiếng Việt**, đơn vị tiền tệ: **VND**
+
+---
+
+## ✨ Tính Năng
+
+### Quản Lý Giao Dịch
+- ✅ Thu nhập / Chi tiêu / Chuyển khoản
+- ✅ Tìm kiếm, lọc theo loại, tài khoản, danh mục, tháng
+- ✅ Phân trang server-side
+- ✅ Undo xóa giao dịch (toast undo)
+- ✅ Tự động cập nhật số dư tài khoản
+
+### Dashboard Tổng Quan
+- ✅ Net Worth (tổng tài sản ròng)
+- ✅ KPI cards: Thu nhập, Chi tiêu, Tiết kiệm (so sánh tháng trước)
+- ✅ Biểu đồ dòng tiền hàng tháng (3/6/12 tháng)
+- ✅ Phân tích chi tiêu theo danh mục (Pie chart)
+- ✅ Quy tắc 50/30/20 (Needs/Wants/Savings)
+- ✅ Tiến độ ngân sách, mục tiêu tiết kiệm
+- ✅ Hóa đơn sắp đến hạn, giao dịch gần đây
+- ✅ Tổng quan tài sản & nợ
+
+### Tài Khoản
+- ✅ 6 loại: Tiền mặt, Ngân hàng, Ví điện tử, Đầu tư, Tiết kiệm, Nợ vay
+- ✅ Tùy chỉnh icon, màu sắc
+- ✅ Tự động cập nhật balance theo giao dịch
+
+### Ngân Sách
+- ✅ Thiết lập ngân sách theo danh mục & tháng
+- ✅ Cảnh báo khi chi tiêu > 80% hoặc vượt ngân sách
+- ✅ Kiểm tra ngân sách real-time khi tạo giao dịch
+
+### Mục Tiêu Tiết Kiệm
+- ✅ 6 loại: Khẩn cấp, Tiết kiệm, Mua sắm, Đầu tư, Trả nợ, Tùy chỉnh
+- ✅ Đóng góp tiền, theo dõi tiến độ
+- ✅ Tính toán số tiền cần tiết kiệm mỗi tháng
+
+### Đầu Tư
+- ✅ 7 loại: Cổ phiếu, ETF, Vàng, Bất động sản, Tiết kiệm, Crypto, Khác
+- ✅ Theo dõi lãi/lỗ, giá mua vs giá hiện tại
+
+### Giao Dịch Định Kỳ
+- ✅ Tần suất: Hàng ngày, Hàng tuần, Hàng tháng, Hàng năm
+- ✅ Tùy chọn ngày trong tuần (cho weekly)
+- ✅ Tự động tạo giao dịch khi đến hạn
+- ✅ Bật/tắt trạng thái
+
+### Báo Cáo & Phân Tích
+- ✅ Chế độ xem: Theo tháng / Theo năm
+- ✅ So sánh với kỳ trước (thu nhập, chi tiêu, tiết kiệm)
+- ✅ Biểu đồ thu nhập - chi tiêu
+- ✅ Xu hướng chi tiêu tích lũy
+- ✅ So sánh danh mục chi tiêu / thu nhập
+- ✅ Cash Flow Statement
+- ✅ Top 5 giao dịch lớn nhất
+
+### Cài Đặt
+- ✅ Dark / Light mode
+- ✅ Quản lý danh mục (tạo, sửa, phân nhóm 50/30/20)
+- ✅ Xuất dữ liệu CSV/Excel
+- ✅ Thông tin người dùng
+
+---
+
+## 🏗 Kiến Trúc
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        Docker Compose                       │
+├──────────────┬────────────────┬──────────────┬──────────────┤
+│   Frontend   │    Backend     │  PostgreSQL  │  DB Backup   │
+│  Next.js 16  │   FastAPI      │     16       │   (daily)    │
+│  :3001       │   :8001        │   :5433      │              │
+│              │                │              │              │
+│  React 19    │  SQLAlchemy 2  │  pgdata vol  │  7d/4w/3m    │
+│  TanStack Q  │  Alembic       │              │              │
+│  Zustand     │  Pydantic v2   │              │              │
+│  Recharts    │  asyncpg       │              │              │
+│  Tailwind 4  │  uv            │              │              │
+└──────────────┴────────────────┴──────────────┴──────────────┘
+```
+
+---
+
+## 🛠 Tech Stack
 
 ### Frontend
-- **Framework**: Next.js 14+ (App Router)
-- **Language**: TypeScript
-- **Styling**: Tailwind CSS + CSS Variables cho theming dark/light
-- **UI Components**: shadcn/ui (làm base, customize lại toàn bộ visual)
-- **Charts**: Recharts hoặc Tremor cho line chart, donut, bar, waterfall
-- **Animations**: Framer Motion cho page transitions, số đếm lên, chart vẽ dần
-- **Icons**: Lucide React + custom emoji icons cho danh mục
-- **Date handling**: date-fns
-- **Form & Validation**: React Hook Form + Zod
-- **State management**: Zustand (client state) + TanStack Query (server state / data fetching)
-- **Fonts**: Instrument Serif (display, dùng cho số liệu lớn) + Geist Sans (body text) — load qua `next/font`
+| Công nghệ | Phiên bản | Mục đích |
+|---|---|---|
+| Next.js | 16.2 | React Framework (App Router) |
+| React | 19.2 | UI Library |
+| TypeScript | 5.x | Type Safety |
+| Tailwind CSS | 4.x | Utility-first CSS |
+| TanStack Query | 5.x | Server State Management |
+| Zustand | 5.x | Client State Management |
+| Recharts | 3.x | Data Visualization |
+| React Hook Form + Zod | 7.x / 4.x | Form Validation |
+| Framer Motion | 12.x | Animations |
+| Radix UI | latest | Accessible Primitives |
+| Lucide React | 1.x | Icon System |
+| ExcelJS + PapaParse | — | CSV/Excel Export |
 
 ### Backend
-- **Runtime**: Node.js với Next.js API Routes (App Router — Route Handlers)
-- **Database**: PostgreSQL (production) / SQLite via Turso (local dev — lightweight, zero config)
-- **ORM**: Drizzle ORM (type-safe, nhẹ hơn Prisma, phù hợp dự án cá nhân)
-- **Auth**: NextAuth.js v5 (hoặc bỏ auth nếu dùng local — chỉ cần 1 tài khoản)
-- **File Export**: `exceljs` cho Excel export, `@react-pdf/renderer` cho PDF
-- **CSV Import**: `papaparse`
+| Công nghệ | Phiên bản | Mục đích |
+|---|---|---|
+| Python | ≥ 3.12 | Runtime |
+| FastAPI | ≥ 0.115 | Web Framework |
+| SQLAlchemy | ≥ 2.0 (async) | ORM |
+| asyncpg | ≥ 0.30 | PostgreSQL Driver |
+| Alembic | ≥ 1.14 | Database Migrations |
+| Pydantic | ≥ 2.10 | Schema Validation |
+| pydantic-settings | ≥ 2.7 | Configuration |
+| python-dateutil | ≥ 2.9 | Date Utilities |
+| uv | latest | Package Manager |
+| Ruff | ≥ 0.8 | Linter/Formatter |
 
-### Dev & Tooling
-- **Package manager**: pnpm
-- **Linting**: ESLint + Prettier
-- **Database migrations**: Drizzle Kit
+### Infrastructure
+| Công nghệ | Mục đích |
+|---|---|
+| PostgreSQL 16 Alpine | Database |
+| Docker + Docker Compose | Containerization |
+| postgres-backup-local | Automated Backups (7d/4w/3m) |
 
 ---
 
-## 🗂️ CẤU TRÚC THƯ MỤC GỢI Ý
+## 🚀 Cài Đặt & Khởi Chạy
+
+### Yêu Cầu
+- **Docker** + Docker Compose (khuyến nghị)
+- Hoặc: Node.js ≥ 22, Python ≥ 3.12, PostgreSQL 16
+
+### Cách 1: Docker Compose (Khuyến nghị)
+
+```bash
+# Clone project
+git clone <repo-url> wealthlog
+cd wealthlog
+
+# Tạo file .env (tùy chọn, đã có giá trị mặc định)
+cp backend/.env.example backend/.env
+cp frontend/.env.example frontend/.env.local
+
+# Khởi chạy toàn bộ stack
+docker compose up -d
+
+# Truy cập:
+# Frontend: http://localhost:3001
+# Backend API: http://localhost:8001
+# Swagger Docs: http://localhost:8001/docs
+```
+
+### Cách 2: Development Mode (Local)
+
+**Backend:**
+```bash
+cd backend
+
+# Cài đặt dependencies với uv
+uv sync
+
+# Khởi động PostgreSQL (cần chạy sẵn ở port 5433)
+# Tạo database 'wealthlog' nếu chưa có
+
+# Chạy dev server
+uv run uvicorn app.main:app --reload --port 8001
+```
+
+**Frontend:**
+```bash
+cd frontend
+
+# Cài đặt dependencies
+pnpm install
+
+# Tạo .env.local
+echo "NEXT_PUBLIC_API_URL=http://localhost:8001" > .env.local
+
+# Chạy dev server
+pnpm dev
+# → http://localhost:3001
+```
+
+### Biến Môi Trường
+
+| Biến | Mặc định | Mô tả |
+|---|---|---|
+| `DATABASE_URL` | `postgresql+asyncpg://wealthlog:wealthlog2026@localhost:5433/wealthlog` | Connection string PostgreSQL |
+| `CORS_ORIGINS` | `["http://localhost:3001"]` | Allowed CORS origins |
+| `DEBUG` | `true` | Bật/tắt debug mode (Swagger Docs) |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:8001` | Backend API URL cho frontend |
+| `POSTGRES_USER` | `wealthlog` | PostgreSQL username |
+| `POSTGRES_PASSWORD` | `wealthlog2026` | PostgreSQL password |
+
+---
+
+## 📁 Cấu Trúc Thư Mục
 
 ```
-/app
-  /(dashboard)/page.tsx          → Dashboard
-  /transactions/page.tsx         → Giao dịch
-  /accounts/page.tsx             → Tài khoản
-  /budget/page.tsx               → Ngân sách
-  /goals/page.tsx                → Mục tiêu
-  /investments/page.tsx          → Đầu tư
-  /reports/page.tsx              → Báo cáo
-  /settings/page.tsx             → Cài đặt
-  /api/...                       → Route Handlers
-
-/components
-  /ui/                           → shadcn base components
-  /dashboard/                    → Dashboard-specific components
-  /transactions/                 → Transaction form, list, filters
-  /charts/                       → Recharts wrappers
-  /layout/                       → Sidebar, Header, FAB
-
-/lib
-  /db/schema.ts                  → Drizzle schema
-  /db/queries.ts                 → Typed queries
-  /utils/                        → Format tiền VND, date helpers
-  /validations/                  → Zod schemas
-
-/hooks/                          → Custom React hooks
-/store/                          → Zustand stores
+wealthlog/
+├── docker-compose.yml          # Docker orchestration
+├── .gitignore
+│
+├── backend/                    # FastAPI Backend
+│   ├── Dockerfile
+│   ├── pyproject.toml          # Dependencies (uv)
+│   ├── alembic.ini             # Migration config
+│   ├── alembic/                # Database migrations
+│   │   └── versions/           # Migration scripts
+│   ├── app/
+│   │   ├── main.py             # FastAPI entrypoint
+│   │   ├── config.py           # Settings (pydantic-settings)
+│   │   ├── database.py         # SQLAlchemy engine + session
+│   │   ├── logging_config.py   # Structured logging
+│   │   ├── models/             # SQLAlchemy ORM models
+│   │   ├── schemas/            # Pydantic v2 schemas
+│   │   ├── routers/            # API route handlers
+│   │   ├── services/           # Business logic
+│   │   └── utils/              # Shared utilities
+│   └── tests/                  # Pytest test suite
+│
+├── frontend/                   # Next.js Frontend
+│   ├── Dockerfile
+│   ├── package.json            # Dependencies (pnpm)
+│   ├── app/                    # Next.js App Router pages
+│   │   ├── layout.tsx          # Root layout
+│   │   ├── page.tsx            # Home → Dashboard
+│   │   ├── globals.css         # Design system (CSS vars)
+│   │   ├── providers.tsx       # QueryClient + Theme + Toast
+│   │   └── [module]/page.tsx   # Feature pages
+│   ├── components/             # React components
+│   │   ├── dashboard/          # Dashboard widget components
+│   │   ├── transactions/       # Transaction list + drawer
+│   │   ├── accounts/           # Account management
+│   │   ├── budget/             # Budget management
+│   │   ├── goals/              # Goal tracking
+│   │   ├── investments/        # Investment portfolio
+│   │   ├── recurring/          # Recurring transactions
+│   │   ├── reports/            # Reports & analytics
+│   │   ├── settings/           # App settings
+│   │   ├── layout/             # Sidebar, Header, FAB
+│   │   ├── ui/                 # Reusable UI primitives
+│   │   └── providers/          # Theme provider
+│   ├── hooks/                  # Custom React hooks
+│   ├── lib/                    # Utilities, API config, validations
+│   ├── store/                  # Zustand global store
+│   └── types/                  # TypeScript interfaces
+│
+└── backup/                     # Auto-generated DB backups
 ```
 
 ---
 
-## 🎨 ĐỊNH HƯỚNG THẨM MỸ
+## 📖 Tài Liệu Chi Tiết
 
-**Phong cách**: "Luxury Fintech" — tối giản nhưng tinh tế, sang trọng, dense data nhưng không rối mắt. Cảm giác như Bloomberg Terminal được thiết kế lại cho người dùng thông thường.
-
-**Colors** (dùng CSS variables, support dark/light toggle):
-- Nền chính dark mode: `#0F0F14`
-- Accent dương: Emerald `#00C896`
-- Accent âm: Rose `#FF4D6D`
-- Surface cards: `rgba(255,255,255,0.04)` với backdrop-blur
-
-**Typography**:
-- Display numbers (Net Worth, KPI lớn): Instrument Serif, size 48-72px
-- Body/UI text: Geist Sans
-
-**Micro-animations** (implement bằng Framer Motion):
-- Số liệu đếm lên khi component mount (counter animation)
-- Chart vẽ dần từ trái sang phải
-- Card hover: subtle scale + glow effect
-- Page transition: fade + slide nhẹ
-- Loading: skeleton shimmer thay vì spinner
+| Tài liệu | Mô tả |
+|---|---|
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Kiến trúc tổng thể, design patterns, luồng dữ liệu |
+| [docs/API.md](docs/API.md) | API Reference — tất cả endpoints, request/response schemas |
+| [docs/DATABASE.md](docs/DATABASE.md) | Database schema, ERD, relationships, migrations |
+| [docs/FRONTEND.md](docs/FRONTEND.md) | Frontend architecture, component tree, state management |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Hướng dẫn deploy Docker, production config |
 
 ---
 
-## 🗺️ CÁC TRANG CẦN BUILD
+## 📜 License
 
-### 1. DASHBOARD
-
-**Header**: Lời chào cá nhân hóa ("Chào buổi sáng, [Tên] ☀️") + ngày hiện tại + notification icon + avatar.
-
-**Hero section — "Sức khỏe tài chính tháng này"**:
-- Net Worth hiển thị cực to, font Instrument Serif, animation đếm số khi load
-- So sánh với tháng trước: `+X.XXX.XXX đ (+12.3%)` với mũi tên màu
-- 3 KPI card ngang: [Tổng thu nhập] [Tổng chi tiêu] [Tiết kiệm được]
-
-**Biểu đồ chính**: Line chart thu vs chi 6 tháng (có toggle: 3T / 6T / 12T). Hover tooltip chi tiết.
-
-**Donut chart**: Chi tiêu theo danh mục, click vào từng mảnh xem chi tiết.
-
-**Giao dịch gần nhất**: 5–7 mục, link "Xem tất cả".
-
-**Goals snapshot**: 2–3 goal card nhỏ với progress bar, % hoàn thành, deadline.
+Private Project — All Rights Reserved.
 
 ---
 
-### 2. GIAO DỊCH (Transactions)
-
-**Filter bar**: Search | Date range picker | Danh mục (multi-select) | Loại (Thu/Chi/Chuyển khoản) | Tài khoản.
-
-**Danh sách**: Group theo ngày (header ngày + tổng thu/chi). Mỗi row: icon danh mục màu | tên | ghi chú | tag | tài khoản | số tiền (xanh/đỏ). Hover row → nút Edit | Delete. Click row → **side panel** chi tiết (không navigate).
-
-**Form thêm/sửa** (Side drawer hoặc Modal):
-- 3 tab: Thu / Chi / Chuyển khoản
-- Số tiền: input lớn, hỗ trợ shorthand `1tr`, `500k`, `1.5m`
-- Danh mục: icon grid picker
-- Ngày: date picker, default hôm nay
-- Tài khoản: dropdown
-- Ghi chú + Tags tự do
-- Nút: Lưu | Lưu & thêm tiếp
-
----
-
-### 3. TÀI KHOẢN (Accounts)
-
-Net Worth tổng + tổng nợ ở trên. Danh sách tài khoản dạng card, phân nhóm: Tiền mặt & Ngân hàng | Ví điện tử | Đầu tư | Tiết kiệm | Nợ/Vay. Mỗi card: logo/icon | tên | số dư | thay đổi tháng này. Click card → lịch sử giao dịch của tài khoản đó. Form thêm tài khoản: loại, tên, số dư ban đầu, màu & icon tuỳ chọn.
-
----
-
-### 4. NGÂN SÁCH (Budget)
-
-Header: "Tháng X/YYYY — Còn X ngày" + tổng ngân sách vs thực chi. Navigate qua lại giữa các tháng.
-
-Danh sách theo danh mục: icon | tên | progress bar gradient (xanh <70% → vàng 70–90% → đỏ >90% → đỏ nháy khi vượt) | đã chi / ngân sách | % còn lại.
-
-Stacked bar chart so sánh ngân sách vs thực chi từng danh mục. Nút "Thiết lập ngân sách tháng sau" — copy từ tháng này hoặc nhập mới.
-
----
-
-### 5. MỤC TIÊU TÀI CHÍNH (Goals)
-
-Header: tổng tiết kiệm đang theo đuổi + số mục tiêu active.
-
-Card grid 2 cột. Mỗi card: tên mục tiêu | emoji/icon | circular progress bar lớn ở giữa (%) | số tiền hiện có / mục tiêu | deadline "Còn X tháng" | cần tiết kiệm thêm X/tháng | nút Thêm tiền | Sửa | Chi tiết.
-
-Detail view: lịch sử thêm tiền (timeline) + dự báo đạt mục tiêu + gợi ý "Cần thêm X.XXX.XXX đ/tháng để đạt đúng hạn".
-
-Loại mục tiêu có sẵn: Quỹ khẩn cấp | Tiết kiệm kỳ hạn | Mua sắm lớn | Quỹ đầu tư | Trả nợ | Custom.
-
----
-
-### 6. ĐẦU TƯ (Investments)
-
-Tổng giá trị đầu tư + tổng lãi/lỗ (số + %) + biểu đồ tăng trưởng theo thời gian.
-
-Danh sách tài sản (manual input): Cổ phiếu | ETF/Chứng chỉ quỹ | Vàng | Bất động sản | Tiết kiệm có kỳ hạn (tính lãi tự động) | Crypto (tuỳ chọn).
-
-Mỗi tài sản: % allocation (pie chart) | ROI | ngày mua / thời gian nắm giữ.
-
----
-
-### 7. BÁO CÁO (Reports)
-
-Bộ lọc: Tháng / Quý / Năm / Tùy chọn + Tài khoản.
-
-Các báo cáo: Thu nhập vs Chi tiêu (bar chart song song) | Chi tiêu theo danh mục (donut + bảng, drill-down xem giao dịch) | Xu hướng tiết kiệm (line chart, highlight tháng tốt/tệ nhất) | Cash Flow (waterfall chart theo tuần) | Net Worth History (line chart từ ngày đầu dùng app, có milestone markers).
-
-Export: PDF và Excel.
-
----
-
-### 8. CÀI ĐẶT (Settings)
-
-Thông tin cá nhân: tên, avatar, đồng tiền mặc định (VND). Quản lý danh mục: thêm/sửa/xóa + icon + màu. Giao diện: toggle Dark/Light mode, ngôn ngữ VI/EN. Dữ liệu: import CSV, export toàn bộ, xóa data. Về ứng dụng: phiên bản, changelog.
-
----
-
-## 🧭 NAVIGATION (Desktop only)
-
-**Sidebar trái — collapsible**:
-- Logo / tên app ở trên
-- Menu: Dashboard | Giao dịch | Tài khoản | Ngân sách | Mục tiêu | Đầu tư | Báo cáo
-- Phần dưới sidebar: Cài đặt | Toggle dark/light
-
-**Floating Action Button (FAB)**: Nút `+` nổi luôn visible trên mọi trang — mở form thêm giao dịch nhanh.
-
----
-
-## 🔑 UX PATTERNS BẮT BUỘC
-
-- **Empty states**: Minh họa SVG đơn giản + CTA rõ ràng (VD: "Bạn chưa có giao dịch nào. Thêm giao dịch đầu tiên →")
-- **Loading**: Skeleton shimmer thay vì spinner
-- **Undo xóa**: Toast "Đã xóa. Hoàn tác?" tồn tại 3 giây
-- **Format tiền VND**: Luôn dùng `1.500.000 đ` (dấu chấm phân cách, chữ "đ" sau)
-- **Highlight giao dịch mới**: Fade-in animation nhẹ sau khi thêm
-- **Keyboard shortcuts** (desktop): `N` = new transaction, `/` = focus search
-- **Confirm dialog** cho mọi action destructive (xóa tài khoản, xóa mục tiêu, xóa dữ liệu)
-- **Side panel** thay navigate cho xem chi tiết giao dịch
-
----
-
-## 📋 THỨ TỰ BUILD
-
-Implement theo thứ tự sau:
-
-1. Setup dự án: khởi tạo Next.js + Tailwind + shadcn/ui + Drizzle + Zustand + TanStack Query
-2. Database schema + seed data mẫu
-3. Layout chính: Sidebar + Header + FAB
-4. **Dashboard** — full desktop
-5. **Giao dịch** + form thêm/sửa
-6. **Mục tiêu**
-7. **Ngân sách**
-8. **Tài khoản**
-9. **Đầu tư**
-10. **Báo cáo**
-11. **Cài đặt**
-
----
-
-Prompt này sẵn sàng để paste vào Claude Code. Một số lưu ý để dùng hiệu quả hơn:
-
-Bạn nên bắt đầu với lệnh `claude` trong một thư mục trống, paste prompt trên, và để Claude Code tự khởi tạo toàn bộ project structure. Nếu muốn Claude Code tập trung vào từng phần thay vì build cả cùng lúc, bạn có thể thêm câu "Hãy bắt đầu với bước 1–3 trước, sau đó dừng lại và chờ tôi xác nhận" vào cuối prompt.
-
-Về tech stack, lý do chọn **Drizzle + SQLite/Turso** thay vì Prisma + PostgreSQL là vì đây là app cá nhân — không cần infrastructure phức tạp, có thể chạy local hoàn toàn không tốn chi phí. Khi muốn deploy, chỉ cần migrate sang Turso (SQLite edge) hoặc Neon (PostgreSQL serverless) là xong.
+<p align="center">
+  <sub>Built with ❤️ for personal finance management</sub>
+</p>
