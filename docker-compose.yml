@@ -5,13 +5,13 @@ services:
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-wealthlog}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wealthlog2026}
-      POSTGRES_DB: wealthlog
+      POSTGRES_DB: ${POSTGRES_DB:-wealthlog}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
       - "5433:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U wealthlog"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-wealthlog}"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -24,9 +24,18 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wealthlog}:${POSTGRES_PASSWORD:-wealthlog2026}@db:5432/wealthlog
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wealthlog}:${POSTGRES_PASSWORD:-wealthlog2026}@db:5432/${POSTGRES_DB:-wealthlog}
       CORS_ORIGINS: '["http://localhost:3001","http://frontend:3001"]'
-      DEBUG: ${DEBUG:-true}
+      DEBUG: ${DEBUG:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AGENT_MODEL: ${AGENT_MODEL:-claude-haiku-4-5-20251001}
+      AGENT_MAX_TOKENS: ${AGENT_MAX_TOKENS:-4096}
+      AGENT_TOOL_RESULT_MAX_CHARS: ${AGENT_TOOL_RESULT_MAX_CHARS:-3000}
+      AGENT_MAX_HISTORY_TOKENS: ${AGENT_MAX_HISTORY_TOKENS:-16000}
+      AGENT_REVIEW_MODEL: ${AGENT_REVIEW_MODEL:-claude-haiku-4-5-20251001}
+      AGENT_REVIEW_CADENCE: ${AGENT_REVIEW_CADENCE:-6}
+      MCP_HOST: ${MCP_HOST:-0.0.0.0}
+      MCP_PORT: ${MCP_PORT:-8002}
     ports:
       - "8001:8000"
 
@@ -48,7 +57,7 @@ services:
         condition: service_healthy
     environment:
       POSTGRES_HOST: db
-      POSTGRES_DB: wealthlog
+      POSTGRES_DB: ${POSTGRES_DB:-wealthlog}
       POSTGRES_USER: ${POSTGRES_USER:-wealthlog}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-wealthlog2026}
       SCHEDULE: "@daily"
