@@ -1,6 +1,6 @@
 'use client'
 
-import { Plus, Menu } from 'lucide-react'
+import { Plus, Menu, Sparkles } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { getGreeting } from '@/lib/utils'
 import { cn } from '@/lib/utils'
@@ -25,7 +25,7 @@ const PAGE_TITLES: Record<string, string> = {
 }
 
 export function Header() {
-  const { sidebarCollapsed, openAddTransaction, setMobileMenu, mobileMenuOpen } = useAppStore()
+  const { sidebarCollapsed, openAddTransaction, setMobileMenu, mobileMenuOpen, chatOpen, toggleChat } = useAppStore()
   const pathname = usePathname()
 
   const { data: settings } = useQuery<Settings>({
@@ -41,7 +41,7 @@ export function Header() {
   const pageTitle = PAGE_TITLES[pathname] || 'WealthLog'
 
   return (
-    <header className={cn('header', sidebarCollapsed && 'sidebar-collapsed')}>
+    <header className={cn('header', sidebarCollapsed && 'sidebar-collapsed', chatOpen && 'chat-open')}>
       {/* Mobile hamburger */}
       <button
         onClick={() => setMobileMenu(!mobileMenuOpen)}
@@ -77,15 +77,28 @@ export function Header() {
         </div>
       </div>
 
-      {/* Right: Add transaction button */}
-      <button
-        id="header-add-transaction"
-        onClick={() => openAddTransaction()}
-        className="btn btn-primary btn-sm"
-      >
-        <Plus size={14} />
-        <span className="header-btn-text">Thêm giao dịch</span>
-      </button>
+      {/* Right: Add transaction + AI Chat toggle */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+        <button
+          id="header-add-transaction"
+          onClick={() => openAddTransaction()}
+          className="btn btn-primary btn-sm"
+        >
+          <Plus size={14} />
+          <span className="header-btn-text">Thêm giao dịch</span>
+        </button>
+
+        {!chatOpen && (
+          <button
+            onClick={toggleChat}
+            className="chat-toggle-header"
+            title="Trợ lý AI (Ctrl+/)"
+          >
+            <Sparkles size={15} />
+            <span className="header-btn-text">AI</span>
+          </button>
+        )}
+      </div>
 
       <style jsx>{`
         @media (max-width: 1023px) {

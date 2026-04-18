@@ -3,14 +3,14 @@
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { MobileNav } from './MobileNav'
-import { FAB } from './FAB'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/lib/utils'
 import { TransactionDrawer } from '@/components/transactions/TransactionDrawer'
+import { ChatPanel } from '@/components/chat/ChatPanel'
 import { Suspense, useEffect } from 'react'
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarCollapsed, openAddTransaction } = useAppStore()
+  const { sidebarCollapsed, chatOpen, openAddTransaction, toggleChat } = useAppStore()
 
   // Keyboard shortcuts
   useEffect(() => {
@@ -22,22 +22,26 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
         e.preventDefault()
         openAddTransaction()
       }
+      if (e.key === '/' && e.ctrlKey) {
+        e.preventDefault()
+        toggleChat()
+      }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [openAddTransaction])
+  }, [openAddTransaction, toggleChat])
 
   return (
     <div className="app-layout">
       <Sidebar />
       <Header />
-      <main className={cn('main-content', sidebarCollapsed && 'sidebar-collapsed')}>
+      <main className={cn('main-content', sidebarCollapsed && 'sidebar-collapsed', chatOpen && 'chat-open')}>
         <div className="page-container">
           {children}
         </div>
       </main>
-      <FAB />
       <MobileNav />
+      <ChatPanel />
       <Suspense><TransactionDrawer /></Suspense>
     </div>
   )
