@@ -21,6 +21,9 @@ interface AppState {
   addInvestmentOpen: boolean
   editInvestmentId: string | null
   
+  // Chat State
+  chatOpen: boolean
+
   // Selected State
   selectedAccountId: string | null
   selectedTransactionId: string | null
@@ -31,6 +34,10 @@ interface AppState {
   setTheme: (theme: 'dark' | 'light') => void
   toggleTheme: () => void
   
+  toggleChat: () => void
+  openChat: () => void
+  closeChat: () => void
+
   openAddTransaction: (type?: 'income' | 'expense' | 'transfer') => void
   closeAddTransaction: () => void
   openEditTransaction: (id: string) => void
@@ -75,6 +82,8 @@ export const useAppStore = create<AppState>()(
       addInvestmentOpen: false,
       editInvestmentId: null,
       
+      chatOpen: false,
+
       selectedAccountId: null,
       selectedTransactionId: null,
       
@@ -83,6 +92,10 @@ export const useAppStore = create<AppState>()(
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
       
+      toggleChat: () => set(s => ({ chatOpen: !s.chatOpen })),
+      openChat: () => set({ chatOpen: true }),
+      closeChat: () => set({ chatOpen: false }),
+
       openAddTransaction: (type) => set({ addTransactionOpen: true, transactionDefaultType: type || null, editTransactionId: null }),
       closeAddTransaction: () => set({ addTransactionOpen: false, transactionDefaultType: null, editTransactionId: null }),
       openEditTransaction: (id) => set({ editTransactionId: id, addTransactionOpen: true }),
