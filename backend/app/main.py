@@ -12,9 +12,11 @@ from app.routers import (
     accounts,
     budgets,
     categories,
+    chat,
     dashboard,
     goals,
     investments,
+    memory,
     recurring,
     reports,
     settings as settings_router,
@@ -80,6 +82,7 @@ app.add_middleware(
 
 
 # Register routers
+app.include_router(chat.router)
 app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)
@@ -90,6 +93,7 @@ app.include_router(investments.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
+app.include_router(memory.router)
 
 
 @app.get("/health")
