@@ -63,6 +63,10 @@ htmlcov/
 *.db.bak
 backup/*.sql
 backup/*.dump
+backup/daily/
+backup/last/
+backup/monthly/
+backup/weekly/
 
 # ===================================
 # Environment Variables
