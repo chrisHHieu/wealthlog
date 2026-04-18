@@ -1,0 +1,208 @@
+"""MCP tools for reports and dashboard insights."""
+
+from datetime import date, timedelta
+
+from mcp.server.fastmcp import FastMCP
+from sqlalchemy import and_, func, select
+
+from app.mcp.db import get_session
+from app.models.account import Account
+from app.models.category import Category
+from app.models.recurring import RecurringTransaction
+from app.models.transaction import Transaction
+
+
+def _current_month() -> str:
+    d = date.today()
+    return f"{d.year}-{d.month:02d}"
+
+
+def _prev_month(month: str) -> str:
+    y, m = int(month[:4]), int(month[5:7])
+    d = date(y, m, 1) - timedelta(days=1)
+    return f"{d.year}-{d.month:02d}"
+
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    async def get_financial_summary(month: str | None = None) -> str:
+        """Tổng hợp tài chính: net worth, thu chi tháng hiện tại vs tháng trước,
+        tỷ lệ tiết kiệm. Format tháng: YYYY-MM."""
+        m = month or _current_month()
+        pm = _prev_month(m)
+        async with get_session() as db:
+            # Net worth
+            net_worth = (
+                await db.execute(
+                    select(func.coalesce(func.sum(Account.balance), 0)).where(
+                        Account.is_active.is_(True)
+                    )
+                )
+            ).scalar()
+
+            # Current & previous month
+            all_start = f"{pm}-01"
+            all_end = f"{m}-31"
+            rows = (
+                await db.execute(
+                    select(Transaction.type, Transaction.amount, Transaction.date).where(
+                        and_(Transaction.date >= all_start, Transaction.date <= all_end)
+                    )
+                )
+            ).all()
+
+            cur_income = sum(r.amount for r in rows if r.date.startswith(m) and r.type == "income")
+            cur_expense = sum(r.amount for r in rows if r.date.startswith(m) and r.type == "expense")
+            prev_income = sum(r.amount for r in rows if r.date.startswith(pm) and r.type == "income")
+            prev_expense = sum(r.amount for r in rows if r.date.startswith(pm) and r.type == "expense")
+
+            cur_savings = cur_income - cur_expense
+            prev_savings = prev_income - prev_expense
+            rate = round((cur_savings / cur_income) * 100, 1) if cur_income > 0 else 0
+
+            # Income change
+            inc_change = cur_income - prev_income
+            exp_change = cur_expense - prev_expense
+            inc_sign = "+" if inc_change >= 0 else ""
+            exp_sign = "+" if exp_change >= 0 else ""
+
+            return (
+                f"Tổng hợp tài chính tháng {m}:\n"
+                f"- Tài sản ròng: {net_worth:,.0f} VND\n"
+                f"- Thu nhập: {cur_income:,.0f} VND ({inc_sign}{inc_change:,.0f} so với tháng trước)\n"
+                f"- Chi tiêu: {cur_expense:,.0f} VND ({exp_sign}{exp_change:,.0f} so với tháng trước)\n"
+                f"- Tiết kiệm: {cur_savings:,.0f} VND (tỷ lệ: {rate}%)\n"
+                f"\nTháng trước ({pm}): Thu {prev_income:,.0f} | Chi {prev_expense:,.0f} | "
+                f"Tiết kiệm {prev_savings:,.0f}"
+            )
+
+    @mcp.tool()
+    async def get_spending_trends(months: int = 6) -> str:
+        """Xu hướng thu chi qua các tháng gần đây (mặc định 6 tháng)."""
+        today = date.today()
+        start = date(today.year, today.month, 1)
+        for _ in range(months - 1):
+            start = (start - timedelta(days=1)).replace(day=1)
+        start_str = start.strftime("%Y-%m-%d")
+        end_str = today.strftime("%Y-%m-%d")
+
+        async with get_session() as db:
+            rows = (
+                await db.execute(
+                    select(
+                        func.substring(Transaction.date, 1, 7).label("month"),
+                        Transaction.type,
+                        func.sum(Transaction.amount).label("total"),
+                    )
+                    .where(and_(Transaction.date >= start_str, Transaction.date <= end_str))
+                    .group_by("month", Transaction.type)
+                    .order_by("month")
+                )
+            ).all()
+
+            if not rows:
+                return "Không có dữ liệu."
+
+            monthly: dict[str, dict[str, float]] = {}
+            for m, tx_type, total in rows:
+                if m not in monthly:
+                    monthly[m] = {"income": 0, "expense": 0}
+                if tx_type in ("income", "expense"):
+                    monthly[m][tx_type] = total
+
+            lines = [f"Xu hướng {months} tháng gần nhất:"]
+            for m in sorted(monthly):
+                inc = monthly[m]["income"]
+                exp = monthly[m]["expense"]
+                sav = inc - exp
+                lines.append(f"- {m}: Thu {inc:,.0f} | Chi {exp:,.0f} | Tiết kiệm {sav:,.0f}")
+            return "\n".join(lines)
+
+    @mcp.tool()
+    async def get_top_expenses(month: str | None = None, limit: int = 10) -> str:
+        """Top giao dịch chi tiêu lớn nhất trong tháng. Format tháng: YYYY-MM."""
+        m = month or _current_month()
+        start = f"{m}-01"
+        end = f"{m}-31"
+        async with get_session() as db:
+            rows = (
+                await db.execute(
+                    select(
+                        Transaction.amount,
+                        Transaction.description,
+                        Transaction.date,
+                        Category.name.label("cat_name"),
+                        Category.icon.label("cat_icon"),
+                    )
+                    .outerjoin(Category, Transaction.category_id == Category.id)
+                    .where(
+                        and_(
+                            Transaction.type == "expense",
+                            Transaction.date >= start,
+                            Transaction.date <= end,
+                        )
+                    )
+                    .order_by(Transaction.amount.desc())
+                    .limit(min(limit, 20))
+                )
+            ).all()
+
+            if not rows:
+                return f"Tháng {m}: Không có chi tiêu."
+
+            lines = [f"Top {len(rows)} chi tiêu lớn nhất tháng {m}:"]
+            for i, r in enumerate(rows, 1):
+                cat = f"{r.cat_icon} {r.cat_name}" if r.cat_name else "Không phân loại"
+                desc = r.description or ""
+                lines.append(f"{i}. {r.amount:,.0f} VND | {cat} | {desc} [{r.date}]")
+            return "\n".join(lines)
+
+    @mcp.tool()
+    async def get_upcoming_bills() -> str:
+        """Các hóa đơn/giao dịch định kỳ sắp tới trong 30 ngày."""
+        today = date.today()
+        today_str = today.strftime("%Y-%m-%d")
+        next30_str = (today + timedelta(days=30)).strftime("%Y-%m-%d")
+
+        async with get_session() as db:
+            rows = (
+                await db.execute(
+                    select(
+                        RecurringTransaction.description,
+                        RecurringTransaction.amount,
+                        RecurringTransaction.type,
+                        RecurringTransaction.next_run_date,
+                        RecurringTransaction.frequency,
+                        Category.name.label("cat_name"),
+                    )
+                    .outerjoin(Category, RecurringTransaction.category_id == Category.id)
+                    .where(
+                        and_(
+                            RecurringTransaction.is_active.is_(True),
+                            RecurringTransaction.next_run_date >= today_str,
+                            RecurringTransaction.next_run_date <= next30_str,
+                        )
+                    )
+                    .order_by(RecurringTransaction.next_run_date)
+                )
+            ).all()
+
+            if not rows:
+                return "Không có hóa đơn nào trong 30 ngày tới."
+
+            type_labels = {"income": "Thu", "expense": "Chi", "transfer": "Chuyển"}
+            freq_labels = {
+                "daily": "Hàng ngày",
+                "weekly": "Hàng tuần",
+                "monthly": "Hàng tháng",
+                "yearly": "Hàng năm",
+            }
+            lines = ["Hóa đơn sắp tới (30 ngày):"]
+            for r in rows:
+                t = type_labels.get(r.type, r.type)
+                f = freq_labels.get(r.frequency.value if hasattr(r.frequency, "value") else r.frequency, "")
+                cat = r.cat_name or ""
+                lines.append(
+                    f"- [{r.next_run_date}] {r.description}: {r.amount:,.0f} VND ({t}) | {f} | {cat}"
+                )
+            return "\n".join(lines)
