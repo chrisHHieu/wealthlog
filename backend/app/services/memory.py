@@ -5,11 +5,12 @@ import json
 import uuid
 
 import anthropic
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.config import settings
 from app.logging_config import get_logger
 from app.mcp.db import get_session
+from app.models.chat import ChatMessage
 from app.models.user_fact import UserFact
 
 logger = get_logger(__name__)
@@ -95,9 +96,6 @@ async def build_facts_prompt() -> str:
 
 # ── Background Review Agent ──────────────────────────────────────────────────
 
-# Track turns per session for review cadence
-_session_turn_counts: dict[str, int] = {}
-
 _REVIEW_PROMPT = (
     "Đọc lại cuộc hội thoại ở trên giữa user và AI về tài chính cá nhân.\n\n"
     "Tìm những thông tin đáng nhớ về user:\n"
@@ -120,17 +118,25 @@ async def maybe_trigger_review(
     session_id: uuid.UUID,
     messages: list[dict],
 ) -> None:
-    """Check if we should trigger a background review for this session."""
-    sid = str(session_id)
-    _session_turn_counts[sid] = _session_turn_counts.get(sid, 0) + 1
+    """Fire a background fact-extraction review every N user turns.
 
-    if _session_turn_counts[sid] < settings.agent_review_cadence:
+    Turn count is derived from the DB (non-empty user-role messages =
+    real user turns, excluding tool_result rows), so process restarts
+    don't reset the cadence.
+    """
+    async with get_session() as db:
+        result = await db.execute(
+            select(func.count(ChatMessage.id)).where(
+                ChatMessage.session_id == session_id,
+                ChatMessage.role == "user",
+                ChatMessage.content != "",
+            )
+        )
+        turn_count = result.scalar_one()
+
+    if turn_count == 0 or turn_count % settings.agent_review_cadence != 0:
         return
 
-    # Reset counter
-    _session_turn_counts[sid] = 0
-
-    # Run in background — don't block the response
     asyncio.create_task(_run_review(session_id, messages))
 
 
