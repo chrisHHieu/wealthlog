@@ -9,6 +9,7 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.chat import ChatMessage, ChatSession
 from app.models.user_fact import UserFact
 
 
@@ -132,62 +133,43 @@ async def test_build_facts_prompt_with_facts(db: AsyncSession):
 # ── Memory Service: maybe_trigger_review ────────────────────────────────────
 
 
-async def test_maybe_trigger_review_cadence():
-    """Review should only fire after N turns (agent_review_cadence)."""
-    from app.services.memory import _session_turn_counts, maybe_trigger_review
+async def test_maybe_trigger_review_cadence(db: AsyncSession):
+    """Review fires only when DB user-turn count is a positive multiple of cadence."""
+    from contextlib import asynccontextmanager
 
-    sid = uuid.uuid4()
-    messages = [{"role": "user", "content": "test"}]
+    from app.services.memory import maybe_trigger_review
 
-    # Reset state
-    _session_turn_counts.pop(str(sid), None)
+    session = ChatSession(title="cadence test")
+    db.add(session)
+    await db.flush()
 
-    with patch("app.services.memory.settings") as mock_settings, \
-         patch("app.services.memory.asyncio") as mock_asyncio:
-        mock_settings.agent_review_cadence = 3
+    @asynccontextmanager
+    async def _patched_session():
+        yield db
 
-        # Turns 1 and 2 — should NOT trigger
-        await maybe_trigger_review(sid, messages)
-        await maybe_trigger_review(sid, messages)
-        mock_asyncio.create_task.assert_not_called()
+    async def _fire_after_n_turns(n: int) -> bool:
+        await db.execute(
+            ChatMessage.__table__.delete().where(
+                ChatMessage.session_id == session.id,
+            )
+        )
+        for i in range(n):
+            db.add(ChatMessage(
+                session_id=session.id, role="user", content=f"msg {i}",
+            ))
+        await db.flush()
 
-        # Turn 3 — should trigger
-        await maybe_trigger_review(sid, messages)
-        mock_asyncio.create_task.assert_called_once()
+        with patch("app.services.memory.get_session", _patched_session), \
+             patch("app.services.memory.settings") as s, \
+             patch("app.services.memory.asyncio") as mock_asyncio:
+            s.agent_review_cadence = 3
+            await maybe_trigger_review(session.id, [{"role": "user", "content": "x"}])
+            return mock_asyncio.create_task.called
 
-    # Cleanup
-    _session_turn_counts.pop(str(sid), None)
-
-
-async def test_maybe_trigger_review_resets_after_fire():
-    """After firing, turn counter resets and must accumulate again."""
-    from app.services.memory import _session_turn_counts, maybe_trigger_review
-
-    sid = uuid.uuid4()
-    messages = [{"role": "user", "content": "test"}]
-    _session_turn_counts.pop(str(sid), None)
-
-    with patch("app.services.memory.settings") as mock_settings, \
-         patch("app.services.memory.asyncio") as mock_asyncio:
-        mock_settings.agent_review_cadence = 2
-
-        # Turn 1 — no fire
-        await maybe_trigger_review(sid, messages)
-        assert mock_asyncio.create_task.call_count == 0
-
-        # Turn 2 — fire
-        await maybe_trigger_review(sid, messages)
-        assert mock_asyncio.create_task.call_count == 1
-
-        # Turn 3 (after reset) — no fire
-        await maybe_trigger_review(sid, messages)
-        assert mock_asyncio.create_task.call_count == 1
-
-        # Turn 4 — fire again
-        await maybe_trigger_review(sid, messages)
-        assert mock_asyncio.create_task.call_count == 2
-
-    _session_turn_counts.pop(str(sid), None)
+    assert await _fire_after_n_turns(2) is False
+    assert await _fire_after_n_turns(3) is True
+    assert await _fire_after_n_turns(5) is False
+    assert await _fire_after_n_turns(6) is True
 
 
 # ── Background Review Agent (_run_review) ───────────────────────────────────

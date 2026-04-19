@@ -1,7 +1,7 @@
 """Integration tests — verify memory layers work together end-to-end.
 
 Tests the REAL flow:
-1. Short-term: long conversation → _compress_history tóm tắt tin cũ
+1. Short-term: turn-boundary compaction preserves pair integrity + tool_use trace
 2. Long-term:  user facts từ session A → inject vào system prompt session B
 3. Background review: đủ turn → _run_review extract facts → facts có trong DB
 """
@@ -20,205 +20,131 @@ from app.models.user_fact import UserFact
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 1. SHORT-TERM MEMORY: _compress_history tóm tắt khi vượt token budget
+# 1. SHORT-TERM MEMORY: turn-boundary compaction
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-def _make_conversation(n_pairs: int) -> list[dict]:
-    """Build a conversation with n user/assistant pairs."""
-    msgs = []
-    for i in range(n_pairs):
-        msgs.append({"role": "user", "content": f"Tin nhắn user lần {i + 1}: chi tiêu tháng này"})
-        msgs.append({"role": "assistant", "content": f"Trả lời assistant lần {i + 1}: tổng chi 5 triệu"})
-    return msgs
-
-
-async def test_compress_history_triggers_when_over_budget():
-    """When token count exceeds budget, old messages are replaced by summary."""
-    from app.services.agent import _compress_history
-
-    messages = _make_conversation(10)  # 20 messages total
-    assert len(messages) == 20
-
-    # Mock client.messages.count_tokens to return a high token count
-    mock_client = AsyncMock()
-    call_count = 0
-
-    async def _fake_count_tokens(**kwargs):
-        nonlocal call_count
-        call_count += 1
-        n = len(kwargs.get("messages", []))
-        if call_count == 1:
-            # First call: original messages → over budget
-            return MagicMock(input_tokens=20000)
-        # Second call: compressed → under budget
-        return MagicMock(input_tokens=3000)
-
-    mock_client.messages.count_tokens = AsyncMock(side_effect=_fake_count_tokens)
-
-    result = await _compress_history(
-        client=mock_client,
-        messages=messages,
-        max_tokens=10000,  # budget
-        keep_recent=6,
-    )
-
-    # Should be compressed: fewer messages than original
-    assert len(result) < len(messages)
-
-    # First message should be the summary block
-    assert "[Tóm tắt cuộc trò chuyện trước đó]" in result[0]["content"]
-    assert result[0]["role"] == "user"
-
-    # Summary should contain snippets of old messages
-    summary = result[0]["content"]
-    assert "User:" in summary
-    assert "AI:" in summary
-
-    # Recent 6 messages should be preserved intact
-    original_recent = messages[-6:]
-    # Find them in result (may have a filler assistant message before them)
-    for orig in original_recent:
-        assert any(
-            m["content"] == orig["content"] for m in result
-        ), f"Recent message lost: {orig['content'][:50]}"
-
-    # Should end with summary marker
-    assert "[Hết tóm tắt — cuộc trò chuyện tiếp tục bên dưới]" in summary
-
-
-async def test_compress_history_keeps_all_when_under_budget():
-    """When under token budget, messages are returned unchanged."""
-    from app.services.agent import _compress_history
-
-    messages = _make_conversation(5)  # 10 messages
-
-    mock_client = AsyncMock()
-    mock_client.messages.count_tokens = AsyncMock(
-        return_value=MagicMock(input_tokens=3000),  # well under budget
-    )
-
-    result = await _compress_history(
-        client=mock_client,
-        messages=messages,
-        max_tokens=10000,
-        keep_recent=6,
-    )
-
-    # No compression needed — same messages returned
-    assert len(result) == len(messages)
-    assert result == messages
-
-
-async def test_compress_history_skips_when_few_messages():
-    """When total messages <= keep_recent, skip entirely (no API call)."""
-    from app.services.agent import _compress_history
-
-    messages = _make_conversation(2)  # 4 messages, keep_recent=6
-
-    mock_client = AsyncMock()
-    mock_client.messages.count_tokens = AsyncMock()
-
-    result = await _compress_history(
-        client=mock_client,
-        messages=messages,
-        max_tokens=10000,
-        keep_recent=6,
-    )
-
-    assert result == messages
-    # Should NOT call count_tokens at all
-    mock_client.messages.count_tokens.assert_not_called()
-
-
-async def test_compress_ensures_valid_alternation():
-    """After compression, user/assistant alternation must be valid for Claude API."""
-    from app.services.agent import _compress_history
-
-    messages = _make_conversation(8)  # 16 messages
-
-    mock_client = AsyncMock()
-    call_count = 0
-
-    async def _fake(**kwargs):
-        nonlocal call_count
-        call_count += 1
-        return MagicMock(input_tokens=20000 if call_count == 1 else 3000)
-
-    mock_client.messages.count_tokens = AsyncMock(side_effect=_fake)
-
-    result = await _compress_history(
-        client=mock_client,
-        messages=messages,
-        max_tokens=5000,
-        keep_recent=6,
-    )
-
-    # Verify alternation: user, assistant, user, assistant, ...
-    for i in range(len(result) - 1):
-        if result[i]["role"] == "user":
-            assert result[i + 1]["role"] == "assistant", (
-                f"Expected assistant after user at index {i}, got {result[i + 1]['role']}"
-            )
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 2. COMPACT OLD TOOL RESULTS (agent loop nội bộ)
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-async def test_compact_old_tool_results_keeps_recent():
-    """Tool results from recent iterations preserved, old ones compacted."""
-    from app.services.agent import _compact_old_tool_results
-
-    messages = [
-        {"role": "user", "content": "Tổng chi tháng này"},
-        # Iteration 1 - assistant calls tool
+def _tool_turn(user_text: str, tool_id: str, tool_name: str,
+               tool_input: dict, tool_result: str, final_text: str) -> list[dict]:
+    """Build one full turn: user → assistant(tool_use) → tool_result → assistant(final)."""
+    return [
+        {"role": "user", "content": user_text},
         {"role": "assistant", "content": [
-            {"type": "tool_use", "id": "t1", "name": "get_summary", "input": {}},
+            {"type": "tool_use", "id": tool_id, "name": tool_name, "input": tool_input},
         ]},
-        # Iteration 1 - tool result (OLD → should be compacted)
         {"role": "user", "content": [
-            {"type": "tool_result", "tool_use_id": "t1",
-             "content": "Chi tiêu tháng 3: Ăn uống 2,000,000 | Di chuyển 500,000 | ..."},
+            {"type": "tool_result", "tool_use_id": tool_id, "content": tool_result},
         ]},
-        # Iteration 2 - assistant calls another tool
-        {"role": "assistant", "content": [
-            {"type": "tool_use", "id": "t2", "name": "get_budget", "input": {}},
-        ]},
-        # Iteration 2 - tool result (RECENT → keep)
-        {"role": "user", "content": [
-            {"type": "tool_result", "tool_use_id": "t2",
-             "content": "Budget tháng 3: Ăn uống 3,000,000 còn dư 1,000,000"},
-        ]},
-        # Iteration 3 - assistant calls another tool
-        {"role": "assistant", "content": [
-            {"type": "tool_use", "id": "t3", "name": "get_goals", "input": {}},
-        ]},
-        # Iteration 3 - tool result (RECENT → keep)
-        {"role": "user", "content": [
-            {"type": "tool_result", "tool_use_id": "t3",
-             "content": "Mục tiêu: Tiết kiệm 50 triệu — đạt 30%"},
-        ]},
+        {"role": "assistant", "content": final_text},
     ]
 
-    result = _compact_old_tool_results(messages, keep_recent=2)
 
-    # First tool result (t1) should be compacted
-    t1_msg = [m for m in result if m["role"] == "user"
-              and isinstance(m.get("content"), list)
-              and any(b.get("tool_use_id") == "t1" for b in m["content"]
-                      if isinstance(b, dict))]
-    assert len(t1_msg) == 1
-    t1_content = t1_msg[0]["content"][0]["content"]
-    assert "[Kết quả đã xử lý:" in t1_content
+def test_compact_history_passthrough_when_short():
+    """≤ keep_recent_turns turns → no change."""
+    from app.services.agent import _compact_history
 
-    # Recent tool results (t2, t3) should be intact
-    t2_msg = [m for m in result if m["role"] == "user"
-              and isinstance(m.get("content"), list)
-              and any(b.get("tool_use_id") == "t2" for b in m["content"]
-                      if isinstance(b, dict))]
-    assert "Budget tháng 3" in t2_msg[0]["content"][0]["content"]
+    messages = (
+        _tool_turn("Chi tháng 3?", "t1", "get_summary", {},
+                   "Tổng: 8.5M", "Tháng 3 bạn chi 8.5M.")
+        + _tool_turn("Còn tháng 2?", "t2", "get_summary", {"month": "2026-02"},
+                     "Tổng: 7.2M", "Tháng 2 là 7.2M.")
+    )
+
+    result = _compact_history(messages, keep_recent_turns=3, old_tool_result_chars=100)
+    assert result == messages
+
+
+def test_compact_history_truncates_only_old_tool_results():
+    """Old turns: tool_result bị cắt. Recent turns: nguyên vẹn."""
+    from app.services.agent import _compact_history
+
+    long_result = "X" * 2000  # far above max_chars
+    short_result = "Budget còn dư 1M"
+
+    messages = (
+        _tool_turn("Q1", "t1", "get_a", {}, long_result, "A1")
+        + _tool_turn("Q2", "t2", "get_b", {}, long_result, "A2")
+        + _tool_turn("Q3", "t3", "get_c", {}, short_result, "A3")
+        + _tool_turn("Q4", "t4", "get_d", {}, short_result, "A4")
+    )
+
+    result = _compact_history(messages, keep_recent_turns=2, old_tool_result_chars=100)
+
+    def _find_result(tool_id: str) -> str:
+        for msg in result:
+            if msg["role"] != "user" or not isinstance(msg["content"], list):
+                continue
+            for b in msg["content"]:
+                if isinstance(b, dict) and b.get("tool_use_id") == tool_id:
+                    return b["content"]
+        raise AssertionError(f"tool_use_id {tool_id} not found")
+
+    # Old turns (t1, t2): truncated
+    assert len(_find_result("t1")) < 2000
+    assert "ký tự bị cắt" in _find_result("t1") or "cắt bớt" in _find_result("t1")
+    assert len(_find_result("t2")) < 2000
+
+    # Recent turns (t3, t4): untouched
+    assert _find_result("t3") == short_result
+    assert _find_result("t4") == short_result
+
+
+def test_compact_history_preserves_tool_use_trace():
+    """tool_use blocks in OLD turns stay verbatim — agent remembers what it called."""
+    from app.services.agent import _compact_history
+
+    messages = (
+        _tool_turn("Q1", "t1", "get_spending_by_category",
+                   {"month": "2026-01"}, "X" * 2000, "A1")
+        + _tool_turn("Q2", "t2", "get_b", {}, "short", "A2")
+        + _tool_turn("Q3", "t3", "get_c", {}, "short", "A3")
+        + _tool_turn("Q4", "t4", "get_d", {}, "short", "A4")
+    )
+
+    result = _compact_history(messages, keep_recent_turns=2, old_tool_result_chars=100)
+
+    # The old tool_use block must still carry name + input
+    tool_use_blocks = [
+        b for msg in result if isinstance(msg.get("content"), list)
+        for b in msg["content"]
+        if isinstance(b, dict) and b.get("type") == "tool_use"
+    ]
+    t1 = next((b for b in tool_use_blocks if b["id"] == "t1"), None)
+    assert t1 is not None, "tool_use from old turn was dropped"
+    assert t1["name"] == "get_spending_by_category"
+    assert t1["input"] == {"month": "2026-01"}
+
+
+def test_compact_history_never_splits_tool_use_pair():
+    """Cut at assistant-final boundary — every tool_use has its tool_result in the same list."""
+    from app.services.agent import _compact_history
+
+    messages = (
+        _tool_turn("Q1", "t1", "a", {}, "r1", "A1")
+        + _tool_turn("Q2", "t2", "b", {}, "r2", "A2")
+        + _tool_turn("Q3", "t3", "c", {}, "r3", "A3")
+        + _tool_turn("Q4", "t4", "d", {}, "r4", "A4")
+    )
+
+    result = _compact_history(messages, keep_recent_turns=2, old_tool_result_chars=50)
+
+    tool_use_ids = set()
+    tool_result_ids = set()
+    for msg in result:
+        if not isinstance(msg.get("content"), list):
+            continue
+        for b in msg["content"]:
+            if not isinstance(b, dict):
+                continue
+            if b.get("type") == "tool_use":
+                tool_use_ids.add(b["id"])
+            elif b.get("type") == "tool_result":
+                tool_result_ids.add(b["tool_use_id"])
+
+    assert tool_use_ids == tool_result_ids, (
+        f"Unpaired ids: use-only={tool_use_ids - tool_result_ids}, "
+        f"result-only={tool_result_ids - tool_use_ids}"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -280,10 +206,9 @@ async def test_build_system_prompt_includes_user_facts(db: AsyncSession):
 async def test_background_review_full_flow(db: AsyncSession):
     """Simulate a multi-turn conversation that triggers background review
     and verify facts are extracted and saved to DB."""
-    from app.services.memory import _run_review, _session_turn_counts, maybe_trigger_review
+    from app.services.memory import _run_review
 
     session_id = uuid.uuid4()
-    _session_turn_counts.pop(str(session_id), None)
 
     # Build a realistic conversation
     conversation = [
@@ -329,9 +254,6 @@ async def test_background_review_full_flow(db: AsyncSession):
 
     assert "Hay quên ghi chi tiêu tiền mặt" in saved
     assert saved["Hay quên ghi chi tiêu tiền mặt"] == "habit"
-
-    # Cleanup
-    _session_turn_counts.pop(str(session_id), None)
 
 
 async def test_background_review_across_sessions(db: AsyncSession):
@@ -395,82 +317,91 @@ async def test_background_review_across_sessions(db: AsyncSession):
     assert "Thu nhập trung bình khoảng 15-20 triệu" in facts
 
 
-async def test_review_cadence_fires_then_facts_in_next_prompt(db: AsyncSession):
-    """End-to-end: turn accumulation → review fires → facts appear in prompt.
+async def test_review_cadence_fires_on_db_turn_count(db: AsyncSession):
+    """Cadence is driven by DB count of user turns — survives process restart.
 
-    Simulates:
-    1. User chats for N turns (cadence threshold)
-    2. Background review fires and extracts facts
-    3. Next session's system prompt includes those facts
+    Inserts real ChatMessage rows; maybe_trigger_review counts them and only
+    fires when count is a positive multiple of cadence.
     """
-    from app.services.memory import (
-        _run_review,
-        _session_turn_counts,
-        build_facts_prompt,
-        maybe_trigger_review,
-    )
+    from app.services.memory import build_facts_prompt, maybe_trigger_review
 
-    session_id = uuid.uuid4()
-    _session_turn_counts.pop(str(session_id), None)
+    session = ChatSession(title="Cadence test")
+    db.add(session)
+    await db.flush()
 
-    messages = [
-        {"role": "user", "content": "Tôi chi 3 triệu cho ăn uống mỗi tháng"},
-        {"role": "assistant", "content": "Ghi nhận chi tiêu ăn uống."},
-    ]
-
-    # Step 1: Accumulate turns until cadence fires
     review_task = None
 
-    with patch("app.services.memory.settings") as mock_settings, \
-         patch("app.services.memory.asyncio") as mock_asyncio:
-        mock_settings.agent_review_cadence = 3
+    def capture_task(coro):
+        nonlocal review_task
+        review_task = coro
+        return MagicMock()
 
-        # Capture the coroutine when create_task is called
-        def capture_task(coro):
-            nonlocal review_task
-            review_task = coro
-            return MagicMock()
+    async def _trigger_with_n_user_turns(n: int) -> None:
+        nonlocal review_task
+        review_task = None
+        await db.execute(
+            ChatMessage.__table__.delete().where(
+                ChatMessage.session_id == session.id,
+            )
+        )
+        for i in range(n):
+            db.add(ChatMessage(
+                session_id=session.id, role="user", content=f"turn {i}",
+            ))
+        await db.flush()
 
-        mock_asyncio.create_task = capture_task
+        with _patch_get_session(db), \
+             patch("app.services.memory.settings") as s, \
+             patch("app.services.memory.asyncio.create_task", side_effect=capture_task):
+            s.agent_review_cadence = 3
+            await maybe_trigger_review(session.id, messages=[])
 
-        # Turn 1, 2: no fire
-        await maybe_trigger_review(session_id, messages)
-        await maybe_trigger_review(session_id, messages)
-        assert review_task is None
+    # Count=2 → skip (2 % 3 != 0)
+    await _trigger_with_n_user_turns(2)
+    assert review_task is None
 
-        # Turn 3: fire!
-        await maybe_trigger_review(session_id, messages)
-        assert review_task is not None
+    # Count=3 → fire
+    await _trigger_with_n_user_turns(3)
+    assert review_task is not None
 
-    # Step 2: Execute the review (would normally run as background task)
-    mock_response = MagicMock()
-    mock_response.content = [MagicMock(text=json.dumps([
-        {"fact": "Chi 3 triệu/tháng cho ăn uống", "category": "habit"},
-    ]))]
+    # Count=6 → fire again
+    await _trigger_with_n_user_turns(6)
+    assert review_task is not None
 
-    mock_client = AsyncMock()
-    mock_client.messages.create = AsyncMock(return_value=mock_response)
+    # Drain the coroutine so it doesn't emit warnings
+    review_task.close()
+
+
+async def test_review_cadence_skips_empty_user_rows(db: AsyncSession):
+    """Empty-content user rows (tool_result plumbing) don't count as turns."""
+    from app.services.memory import maybe_trigger_review
+
+    session = ChatSession(title="Cadence — empty rows")
+    db.add(session)
+    await db.flush()
+
+    # 2 real user turns + 5 empty (tool_result) rows → only the 2 should count
+    db.add(ChatMessage(session_id=session.id, role="user", content="Q1"))
+    db.add(ChatMessage(session_id=session.id, role="user", content="Q2"))
+    for _ in range(5):
+        db.add(ChatMessage(session_id=session.id, role="user", content=""))
+    await db.flush()
+
+    review_task = None
+
+    def capture_task(coro):
+        nonlocal review_task
+        review_task = coro
+        return MagicMock()
 
     with _patch_get_session(db), \
-         patch("app.services.memory.anthropic.AsyncAnthropic", return_value=mock_client), \
-         patch("app.services.memory.settings") as s:
-        s.anthropic_api_key = "key"
-        s.agent_review_model = "claude-haiku-4-5-20251001"
-        # Execute the captured coroutine
-        await review_task
+         patch("app.services.memory.settings") as s, \
+         patch("app.services.memory.asyncio.create_task", side_effect=capture_task):
+        s.agent_review_cadence = 3
+        await maybe_trigger_review(session.id, messages=[])
 
-    # Step 3: Verify fact is in DB and appears in next prompt
-    rows = (await db.execute(select(UserFact))).scalars().all()
-    assert len(rows) == 1
-    assert rows[0].fact == "Chi 3 triệu/tháng cho ăn uống"
-
-    with _patch_get_session(db):
-        prompt = await build_facts_prompt()
-
-    assert "Chi 3 triệu/tháng cho ăn uống" in prompt
-    assert "(Thói quen)" in prompt
-
-    _session_turn_counts.pop(str(session_id), None)
+    # real turn count = 2, not 7 → should NOT fire
+    assert review_task is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════
