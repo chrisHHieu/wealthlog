@@ -2,6 +2,7 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -34,6 +35,9 @@ class ChatMessageResponse(CamelModel):
     id: uuid.UUID
     role: str
     content: str
+    # Full Anthropic blocks (thinking/text/tool_use/tool_result) when available.
+    # Frontend uses these to rebuild the timeline of thinking + tool steps on reload.
+    blocks: list[dict[str, Any]] | None = None
     created_at: datetime
 
 

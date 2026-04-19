@@ -2,8 +2,10 @@
 
 import uuid
 from datetime import datetime
+from typing import Any
 
 from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -44,6 +46,9 @@ class ChatMessage(Base, UUIDMixin, CreatedAtMixin):
     )
     role: Mapped[str] = mapped_column(String(20))  # "user" or "assistant"
     content: Mapped[str] = mapped_column(Text, default="")
+    # Full Anthropic content blocks: text, thinking (with signature), tool_use, tool_result.
+    # NULL for legacy rows and simple user messages — fall back to `content` in that case.
+    blocks: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
