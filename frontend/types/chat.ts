@@ -1,16 +1,34 @@
+export type ChatStep =
+  | {
+      kind: 'thinking'
+      stepId: string
+      content: string
+      streaming?: boolean
+    }
+  | {
+      kind: 'text'
+      stepId: string
+      content: string
+      streaming?: boolean
+      final?: boolean  // true = this was the final answer
+    }
+  | {
+      kind: 'tool'
+      stepId: string
+      id: string
+      name: string
+      input?: Record<string, unknown>
+      result?: string
+      status: 'running' | 'done'
+    }
+
 export interface ChatMessage {
   id: string
   role: 'user' | 'assistant'
   content: string
   timestamp: Date
-  toolCalls?: ToolCallInfo[]
+  steps?: ChatStep[]
   isStreaming?: boolean
-}
-
-export interface ToolCallInfo {
-  name: string
-  status: 'running' | 'done'
-  result?: string
 }
 
 export interface ChatSession {
