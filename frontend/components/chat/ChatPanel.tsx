@@ -7,7 +7,127 @@ import { useAppStore } from '@/store/useAppStore'
 import { API_URL } from '@/lib/api'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
-import type { ChatMessage as ChatMessageType, ChatSession } from '@/types/chat'
+import type { ChatMessage as ChatMessageType, ChatSession, ChatStep } from '@/types/chat'
+
+type PersistedBlock = {
+  type?: string
+  text?: string
+  thinking?: string
+  id?: string
+  name?: string
+  input?: Record<string, unknown>
+  tool_use_id?: string
+  content?: unknown
+}
+
+type PersistedMessage = {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  blocks?: PersistedBlock[] | null
+  createdAt: string
+}
+
+function isToolResultOnlyRow(m: PersistedMessage): boolean {
+  return !!m.blocks && m.blocks.length > 0 && m.blocks.every(b => b?.type === 'tool_result')
+}
+
+function toolResultText(content: unknown): string {
+  if (typeof content === 'string') return content
+  try { return JSON.stringify(content) } catch { return String(content) }
+}
+
+/**
+ * Convert persisted DB rows into UI ChatMessages, rebuilding the thinking/tool
+ * timeline. Consecutive assistant iterations (thinking → tool_use → tool_result
+ * → more thinking → final text) are merged into a single UI message so the
+ * reloaded view matches how it looked while streaming.
+ */
+function rowsToChatMessages(rows: PersistedMessage[]): ChatMessageType[] {
+  // tool_use_id → result text (results are stored in separate "user" rows)
+  const resultByToolUseId = new Map<string, string>()
+  for (const m of rows) {
+    if (!m.blocks) continue
+    for (const b of m.blocks) {
+      if (b?.type === 'tool_result' && typeof b.tool_use_id === 'string') {
+        resultByToolUseId.set(b.tool_use_id, toolResultText(b.content))
+      }
+    }
+  }
+
+  const out: ChatMessageType[] = []
+  let currentAssistant: ChatMessageType | null = null
+
+  for (const m of rows) {
+    if (m.role === 'user' && !isToolResultOnlyRow(m)) {
+      out.push({
+        id: m.id,
+        role: 'user',
+        content: m.content,
+        timestamp: new Date(m.createdAt),
+      })
+      currentAssistant = null
+      continue
+    }
+
+    if (m.role === 'assistant') {
+      if (!currentAssistant) {
+        currentAssistant = {
+          id: m.id,
+          role: 'assistant',
+          content: '',
+          timestamp: new Date(m.createdAt),
+          steps: [],
+        }
+        out.push(currentAssistant)
+      }
+
+      const blocks = m.blocks || []
+      if (blocks.length === 0 && m.content) {
+        // Legacy row without blocks — render as a single text step
+        currentAssistant.steps!.push({
+          kind: 'text',
+          stepId: m.id,
+          content: m.content,
+        })
+        currentAssistant.content += m.content
+        continue
+      }
+
+      blocks.forEach((b, i) => {
+        const stepId = `${m.id}-${i}`
+        if (b?.type === 'thinking') {
+          currentAssistant!.steps!.push({
+            kind: 'thinking',
+            stepId,
+            content: b.thinking || '',
+          })
+        } else if (b?.type === 'text' && b.text) {
+          currentAssistant!.steps!.push({
+            kind: 'text',
+            stepId,
+            content: b.text,
+          })
+          currentAssistant!.content += b.text
+        } else if (b?.type === 'tool_use' && typeof b.id === 'string') {
+          const step: ChatStep = {
+            kind: 'tool',
+            stepId,
+            id: b.id,
+            name: b.name || '',
+            input: b.input,
+            result: resultByToolUseId.get(b.id),
+            status: 'done',
+          }
+          currentAssistant!.steps!.push(step)
+        }
+      })
+    }
+    // tool_result-only user rows: skip (already folded into tool steps via the map)
+  }
+
+  return out
+}
 
 const SUGGESTIONS = [
   { icon: BarChart3, label: 'Tổng quan tài chính tháng này', color: 'purple' },
@@ -28,14 +148,7 @@ function useChat() {
       if (!res.ok) return
       const data = await res.json()
       setSessionId(id)
-      setMessages(
-        data.messages.map((m: { id: string; role: string; content: string; createdAt: string }) => ({
-          id: m.id,
-          role: m.role as 'user' | 'assistant',
-          content: m.content,
-          timestamp: new Date(m.createdAt),
-        }))
-      )
+      setMessages(rowsToChatMessages(data.messages as PersistedMessage[]))
     } catch {
       // ignore
     }
@@ -55,7 +168,7 @@ function useChat() {
       role: 'assistant',
       content: '',
       timestamp: new Date(),
-      toolCalls: [],
+      steps: [],
       isStreaming: true,
     }])
     setIsStreaming(true)
@@ -104,37 +217,122 @@ function useChat() {
             const data = JSON.parse(line.slice(6))
 
             if (eventType === 'session') {
-              // Capture session ID from backend
               setSessionId(data.session_id)
+            } else if (eventType === 'thinking_start') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: [...(m.steps || []), {
+                      kind: 'thinking' as const,
+                      stepId: data.step_id,
+                      content: '',
+                      streaming: true,
+                    }] }
+                  : m
+              ))
+            } else if (eventType === 'thinking_delta') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: (m.steps || []).map(s =>
+                      s.kind === 'thinking' && s.stepId === data.step_id
+                        ? { ...s, content: s.content + data.text }
+                        : s
+                    ) }
+                  : m
+              ))
+            } else if (eventType === 'thinking_stop') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: (m.steps || []).map(s =>
+                      s.kind === 'thinking' && s.stepId === data.step_id
+                        ? { ...s, streaming: false }
+                        : s
+                    ) }
+                  : m
+              ))
+            } else if (eventType === 'text_start') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: [...(m.steps || []), {
+                      kind: 'text' as const,
+                      stepId: data.step_id,
+                      content: '',
+                      streaming: true,
+                    }] }
+                  : m
+              ))
+            } else if (eventType === 'text_delta') {
+              setMessages(prev => prev.map(m => {
+                if (m.id !== aiId) return m
+                const steps = m.steps || []
+                // Append to existing text step, or create one if missing (safety)
+                const hasStep = steps.some(s => s.kind === 'text' && s.stepId === data.step_id)
+                const nextSteps = hasStep
+                  ? steps.map(s =>
+                      s.kind === 'text' && s.stepId === data.step_id
+                        ? { ...s, content: s.content + data.text }
+                        : s
+                    )
+                  : [...steps, { kind: 'text' as const, stepId: data.step_id, content: data.text, streaming: true }]
+                return { ...m, steps: nextSteps, content: m.content + data.text }
+              }))
+            } else if (eventType === 'text_stop') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: (m.steps || []).map(s =>
+                      s.kind === 'text' && s.stepId === data.step_id
+                        ? { ...s, streaming: false }
+                        : s
+                    ) }
+                  : m
+              ))
             } else if (eventType === 'tool_start') {
               setMessages(prev => prev.map(m =>
                 m.id === aiId
-                  ? { ...m, toolCalls: [...(m.toolCalls || []), { name: data.name, status: 'running' as const }] }
+                  ? { ...m, steps: [...(m.steps || []), {
+                      kind: 'tool' as const,
+                      stepId: data.step_id,
+                      id: data.id,
+                      name: data.name,
+                      status: 'running' as const,
+                    }] }
+                  : m
+              ))
+            } else if (eventType === 'tool_input') {
+              setMessages(prev => prev.map(m =>
+                m.id === aiId
+                  ? { ...m, steps: (m.steps || []).map(s =>
+                      s.kind === 'tool' && s.id === data.id
+                        ? { ...s, input: data.input }
+                        : s
+                    ) }
                   : m
               ))
             } else if (eventType === 'tool_done') {
               setMessages(prev => prev.map(m =>
                 m.id === aiId
-                  ? {
-                      ...m,
-                      toolCalls: (m.toolCalls || []).map(t =>
-                        t.name === data.name && t.status === 'running'
-                          ? { ...t, status: 'done' as const, result: data.result }
-                          : t
-                      ),
-                    }
-                  : m
-              ))
-            } else if (eventType === 'text_delta') {
-              setMessages(prev => prev.map(m =>
-                m.id === aiId
-                  ? { ...m, content: m.content + data.text }
+                  ? { ...m, steps: (m.steps || []).map(s =>
+                      s.kind === 'tool' && s.id === data.id
+                        ? { ...s, status: 'done' as const, result: data.result }
+                        : s
+                    ) }
                   : m
               ))
             } else if (eventType === 'done') {
-              setMessages(prev => prev.map(m =>
-                m.id === aiId ? { ...m, isStreaming: false } : m
-              ))
+              setMessages(prev => prev.map(m => {
+                if (m.id !== aiId) return m
+                // Mark the LAST text step as the final answer
+                const steps = m.steps || []
+                let lastTextIdx = -1
+                for (let i = steps.length - 1; i >= 0; i--) {
+                  if (steps[i].kind === 'text') { lastTextIdx = i; break }
+                }
+                const nextSteps = steps.map((s, i) =>
+                  i === lastTextIdx && s.kind === 'text'
+                    ? { ...s, final: true, streaming: false }
+                    : s
+                )
+                return { ...m, steps: nextSteps, isStreaming: false }
+              }))
             }
 
             eventType = ''
@@ -331,14 +529,6 @@ export function ChatPanel() {
                 {messages.map((msg) => (
                   <ChatMessage key={msg.id} message={msg} />
                 ))}
-
-                {isStreaming && messages.length > 0 && !messages[messages.length - 1]?.content && (
-                  <div className="chat-thinking">
-                    <div className="chat-thinking-dots">
-                      <span /><span /><span />
-                    </div>
-                  </div>
-                )}
 
                 <div ref={messagesEndRef} />
               </div>
