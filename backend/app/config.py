@@ -23,9 +23,12 @@ class Settings(BaseSettings):
     agent_model: str = "claude-haiku-4-5-20251001"
     agent_max_tokens: int = 4096
     agent_tool_result_max_chars: int = 3000
-    agent_max_history_tokens: int = 16000
+    agent_keep_recent_turns: int = 3
+    agent_old_turn_tool_result_chars: int = 300
     agent_review_model: str = "claude-haiku-4-5-20251001"
     agent_review_cadence: int = 6  # review every N turns
+    agent_thinking_enabled: bool = True
+    agent_thinking_budget: int = 2000  # tokens reserved for extended thinking
     mcp_server_url: str = "http://localhost:8002/sse"
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8002
