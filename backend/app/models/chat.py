@@ -4,12 +4,15 @@ import uuid
 from datetime import datetime
 from typing import Any
 
-from sqlalchemy import DateTime, ForeignKey, Index, String, Text, func
+from sqlalchemy import JSON, DateTime, ForeignKey, Index, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
 from app.models.base import CreatedAtMixin, UUIDMixin
+
+# Portable JSON: JSONB in Postgres, JSON elsewhere (SQLite tests).
+_JSONField = JSON().with_variant(JSONB(), "postgresql")
 
 
 class ChatSession(Base, UUIDMixin):
@@ -48,7 +51,7 @@ class ChatMessage(Base, UUIDMixin, CreatedAtMixin):
     content: Mapped[str] = mapped_column(Text, default="")
     # Full Anthropic content blocks: text, thinking (with signature), tool_use, tool_result.
     # NULL for legacy rows and simple user messages — fall back to `content` in that case.
-    blocks: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB, nullable=True)
+    blocks: Mapped[list[dict[str, Any]] | None] = mapped_column(_JSONField, nullable=True)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 

@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, String, Text, func
+from sqlalchemy import DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -21,6 +21,19 @@ class UserFact(Base, UUIDMixin):
     source_session_id: Mapped[str | None] = mapped_column(
         String(36), nullable=True,
     )  # which session it was extracted from
+    # NULL = evergreen. Non-null = time-bound fact (e.g. "đang là sinh viên"),
+    # filtered out of retrieval once passed.
+    expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    # 1-10 scale. Higher = more important. Drives prompt ordering so the most
+    # impactful facts survive when the injection budget is tight.
+    importance: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    # Usage stats — let frequently-surfaced facts bubble up among equals.
+    access_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_accessed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(),
     )

@@ -7,6 +7,7 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.goal import Goal, GoalContribution, GoalType
 from app.models.investment import Investment, InvestmentType
 from app.models.recurring import Frequency, RecurringTransaction
+from app.models.session_summary import SessionSummary
 from app.models.setting import Setting
 from app.models.transaction import Transaction, TransactionType
 from app.models.user_fact import UserFact
@@ -27,6 +28,7 @@ __all__ = [
     "Investment",
     "InvestmentType",
     "RecurringTransaction",
+    "SessionSummary",
     "Setting",
     "Transaction",
     "TransactionType",
