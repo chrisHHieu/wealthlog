@@ -1,11 +1,11 @@
 """Shared helpers for MCP transaction tools."""
 
+from calendar import monthrange
 from datetime import date
 from uuid import UUID
 
 from sqlalchemy import and_, select, update
 
-from app.mcp.db import get_session
 from app.models.account import Account
 from app.models.category import Category
 
@@ -17,6 +17,18 @@ def current_month() -> str:
 
 def today() -> str:
     return date.today().isoformat()
+
+
+def month_range(month: str) -> tuple[str, str]:
+    """Return (start, end) ISO date strings for a YYYY-MM month.
+
+    End is the actual last day (28/29/30/31) — avoids the ``{m}-31`` hack
+    that would break if ``transactions.date`` ever migrates from String to
+    a real DATE column.
+    """
+    y, m = int(month[:4]), int(month[5:7])
+    last = monthrange(y, m)[1]
+    return f"{y}-{m:02d}-01", f"{y}-{m:02d}-{last:02d}"
 
 
 async def adjust_balance(db, account_id: UUID, delta: float) -> None:

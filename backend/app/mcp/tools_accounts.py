@@ -9,10 +9,20 @@ from app.models.account import Account
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    async def get_accounts() -> str:
-        """Lấy danh sách tất cả tài khoản (tên, loại, số dư, tiền tệ, trạng thái)."""
+    async def get_accounts(
+        include_inactive: bool = False,
+        limit: int = 50,
+    ) -> str:
+        """Lấy danh sách tài khoản (tên, loại, số dư, tiền tệ, trạng thái).
+        - include_inactive: mặc định False (chỉ lấy tài khoản đang dùng).
+          Chỉ set True khi user hỏi riêng về tài khoản đã đóng.
+        - limit: tối đa bao nhiêu tài khoản (mặc định 50)."""
         async with get_session() as db:
-            rows = (await db.execute(select(Account))).scalars().all()
+            stmt = select(Account)
+            if not include_inactive:
+                stmt = stmt.where(Account.is_active.is_(True))
+            stmt = stmt.order_by(Account.created_at).limit(limit)
+            rows = (await db.execute(stmt)).scalars().all()
             if not rows:
                 return "Chưa có tài khoản nào."
             lines = []
@@ -22,6 +32,8 @@ def register(mcp: FastMCP) -> None:
                     f"- {a.icon} {a.name} ({a.type.value}): "
                     f"{a.balance:,.0f} {a.currency} [{status}]"
                 )
+            if len(rows) == limit:
+                lines.append(f"\n(Hiển thị {limit} tài khoản đầu — tăng limit nếu cần thêm)")
             return "\n".join(lines)
 
     @mcp.tool()

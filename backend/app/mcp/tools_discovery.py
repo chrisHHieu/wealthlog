@@ -1,5 +1,7 @@
 """MCP tools for schema discovery and read-only SQL queries."""
 
+import re
+
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import text
 
@@ -28,10 +30,21 @@ def _should_sample(col_name: str, data_type: str) -> bool:
     return False
 
 
+_COMMENT_LINE_RE = re.compile(r"--[^\n]*")
+_COMMENT_BLOCK_RE = re.compile(r"/\*.*?\*/", re.DOTALL)
+
+
+def _strip_comments(sql: str) -> str:
+    """Drop SQL comments so leading `-- ...` doesn't fool the first-word check."""
+    return _COMMENT_BLOCK_RE.sub(" ", _COMMENT_LINE_RE.sub(" ", sql))
+
+
 def _is_read_only(sql: str) -> bool:
-    normalized = sql.strip().upper()
-    first_word = normalized.split()[0] if normalized.split() else ""
-    if first_word != "SELECT":
+    # CTEs are valid read-only queries — accept both SELECT and WITH.
+    normalized = _strip_comments(sql).strip().upper()
+    words = normalized.split()
+    first_word = words[0] if words else ""
+    if first_word not in ("SELECT", "WITH"):
         return False
     for keyword in _BLOCKED_KEYWORDS:
         if keyword in normalized:
@@ -124,42 +137,47 @@ async def build_schema_summary() -> str:
 
 
 def _hint_for_sql_error(err: str) -> str | None:
-    """Actionable hint for common Postgres errors — helps agent self-correct."""
+    """Actionable hint for common Postgres errors — helps agent self-correct.
+
+    Hints are agent-facing (the model reads them to retry); the agent translates
+    its user-facing reply into the user's language, so English is fine here.
+    """
     low = err.lower()
     if "invalid input value for enum" in low:
-        return ("Enum values phân biệt hoa/thường. Xem block <database_schema> "
-                "trong system prompt để dùng đúng giá trị (thường là UPPERCASE).")
-    if 'column' in low and 'does not exist' in low:
-        return "Tên cột sai. Xem <database_schema> trong system prompt."
-    if 'relation' in low and 'does not exist' in low:
-        return "Tên bảng sai. Xem <database_schema> trong system prompt."
+        return ("Enum values are case-sensitive. Check <database_schema> in the "
+                "system prompt for the correct values (usually UPPERCASE).")
+    if "column" in low and "does not exist" in low:
+        return "Wrong column name. See <database_schema> in the system prompt."
+    if "relation" in low and "does not exist" in low:
+        return "Wrong table name. See <database_schema> in the system prompt."
     if "function round(double precision, integer) does not exist" in low:
-        return "Postgres không có round(double, int). Cast: ROUND(expr::numeric, 2)."
+        return "Postgres has no round(double, int). Cast first: ROUND(expr::numeric, 2)."
     if "operator does not exist" in low:
-        return "Type mismatch. Kiểm tra kiểu cột trong schema, cast với ::type nếu cần."
+        return "Type mismatch. Check column types in the schema, cast with ::type if needed."
     return None
 
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_database_schema() -> str:
-        """Trả về cấu trúc database (bảng, cột, enum values, foreign keys, samples).
-        Lưu ý: schema ĐÃ có sẵn trong system prompt ở block <database_schema>.
-        Chỉ gọi tool này khi cần re-fetch schema mới nhất (vd: sau khi migration)."""
+        """Return database structure (tables, columns, enum values, FKs, samples).
+        Note: schema is already injected into the system prompt under
+        <database_schema>. Only call this tool to re-fetch the latest schema
+        (e.g., after a migration)."""
         return await build_schema_summary()
 
     @mcp.tool()
     async def query_database(sql: str) -> str:
-        """Thực thi SELECT read-only trên PostgreSQL 16 (LIMIT mặc định 20 dòng).
-        Dùng khi các tool chuyên dụng không đủ thông tin.
-        Schema đã có trong system prompt — xem <database_schema> trước khi viết SQL.
+        """Run a read-only SELECT on PostgreSQL 16 (default LIMIT 20 rows).
+        Use when the specialized tools can't answer the question.
+        Schema is in the system prompt — check <database_schema> before writing SQL.
 
         Postgres quirks:
-        - Cột tiền (amount, target_amount…) là double precision.
-        - ROUND(double, int) KHÔNG tồn tại → cast: ROUND(expr::numeric, 2).
-        - Tránh format/round trong SQL; trả số thô rồi format ở câu trả lời."""
+        - Money columns (amount, target_amount…) are double precision.
+        - ROUND(double, int) does NOT exist → cast: ROUND(expr::numeric, 2).
+        - Avoid format/round in SQL; return raw numbers and format in the reply."""
         if not _is_read_only(sql):
-            return "Lỗi: Chỉ cho phép câu lệnh SELECT (read-only)."
+            return "Error: only SELECT (read-only) statements are allowed."
 
         normalized = sql.strip().rstrip(";")
         if "LIMIT" not in normalized.upper():
@@ -172,18 +190,18 @@ def register(mcp: FastMCP) -> None:
                 columns = list(result.keys()) if result.keys() else []
 
                 if not rows:
-                    return "Không có kết quả."
+                    return "No results."
 
                 lines = [" | ".join(str(c) for c in columns)]
                 lines.append("-" * len(lines[0]))
                 for row in rows:
                     lines.append(" | ".join(str(v) for v in row))
 
-                return f"Kết quả ({len(rows)} dòng):\n" + "\n".join(lines)
+                return f"Results ({len(rows)} rows):\n" + "\n".join(lines)
             except Exception as e:
                 err_msg = str(e)
                 hint = _hint_for_sql_error(err_msg)
-                out = f"Lỗi SQL: {err_msg}"
+                out = f"SQL error: {err_msg}"
                 if hint:
-                    out += f"\n\nGợi ý: {hint}"
+                    out += f"\n\nHint: {hint}"
                 return out

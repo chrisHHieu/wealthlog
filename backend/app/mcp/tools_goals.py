@@ -10,14 +10,16 @@ from app.models.goal import Goal
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    async def get_goals() -> str:
-        """Lấy danh sách mục tiêu tài chính (tên, loại, tiến độ, deadline)."""
+    async def get_goals(limit: int = 30) -> str:
+        """Lấy danh sách mục tiêu tài chính (tên, loại, tiến độ, deadline).
+        - limit: tối đa bao nhiêu mục tiêu (mặc định 30)."""
         async with get_session() as db:
             rows = (
                 await db.execute(
                     select(Goal)
                     .options(selectinload(Goal.contributions))
                     .order_by(Goal.created_at)
+                    .limit(limit)
                 )
             ).scalars().all()
 
@@ -46,4 +48,6 @@ def register(mcp: FastMCP) -> None:
                 )
                 if not g.is_completed and remaining > 0:
                     lines.append(f"  Còn thiếu: {remaining:,.0f} VND")
+            if len(rows) == limit:
+                lines.append(f"\n(Hiển thị {limit} mục tiêu đầu — tăng limit nếu cần thêm)")
             return "\n".join(lines)

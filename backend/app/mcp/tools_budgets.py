@@ -1,19 +1,13 @@
 """MCP tools for budgets."""
 
-from datetime import date
-
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import and_, func, select
 
+from app.mcp._helpers import current_month, month_range
 from app.mcp.db import get_session
 from app.models.budget import Budget
 from app.models.category import Category
 from app.models.transaction import Transaction
-
-
-def _current_month() -> str:
-    d = date.today()
-    return f"{d.year}-{d.month:02d}"
 
 
 def register(mcp: FastMCP) -> None:
@@ -21,9 +15,8 @@ def register(mcp: FastMCP) -> None:
     async def get_budget_status(month: str | None = None) -> str:
         """Tình trạng ngân sách tháng: ngân sách vs thực chi theo từng danh mục.
         Format tháng: YYYY-MM."""
-        m = month or _current_month()
-        start = f"{m}-01"
-        end = f"{m}-31"
+        m = month or current_month()
+        start, end = month_range(m)
         async with get_session() as db:
             # Get budgets
             budgets = (

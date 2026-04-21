@@ -3,10 +3,12 @@
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import and_, func, select
 
-from app.mcp._helpers import current_month
+from app.mcp._helpers import current_month, month_range
 from app.mcp.db import get_session
 from app.models.category import Category
 from app.models.transaction import Transaction
+
+_VALID_TYPES = ("income", "expense", "transfer")
 
 
 def register(mcp: FastMCP) -> None:
@@ -21,6 +23,8 @@ def register(mcp: FastMCP) -> None:
     ) -> str:
         """Tìm kiếm giao dịch theo ngày, loại (income/expense/transfer), tên danh mục, từ khóa.
         Ngày theo format YYYY-MM-DD. Mặc định trả về 20 giao dịch gần nhất."""
+        if type is not None and type not in _VALID_TYPES:
+            return f"Lỗi: type phải là một trong {_VALID_TYPES}."
         async with get_session() as db:
             stmt = (
                 select(
@@ -68,11 +72,11 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_spending_by_category(month: str | None = None, top_n: int = 10) -> str:
-        """Chi tiêu theo từng danh mục trong tháng. Format tháng: YYYY-MM.
+        """CHI TIÊU (expense) theo từng danh mục trong tháng. Format tháng: YYYY-MM.
+        Chỉ tính giao dịch type=expense. Muốn xem thu nhập → dùng get_income_by_category.
         top_n: số danh mục hiển thị (mặc định 10, còn lại gộp vào 'Khác')."""
         m = month or current_month()
-        start = f"{m}-01"
-        end = f"{m}-31"
+        start, end = month_range(m)
         async with get_session() as db:
             rows = (
                 await db.execute(
@@ -114,11 +118,11 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_income_by_category(month: str | None = None, top_n: int = 10) -> str:
-        """Thu nhập theo từng danh mục trong tháng. Format tháng: YYYY-MM.
+        """THU NHẬP (income) theo từng danh mục trong tháng. Format tháng: YYYY-MM.
+        Chỉ tính giao dịch type=income. Muốn xem chi tiêu → dùng get_spending_by_category.
         top_n: số danh mục hiển thị (mặc định 10, còn lại gộp vào 'Khác')."""
         m = month or current_month()
-        start = f"{m}-01"
-        end = f"{m}-31"
+        start, end = month_range(m)
         async with get_session() as db:
             rows = (
                 await db.execute(

@@ -5,16 +5,12 @@ from datetime import date, timedelta
 from mcp.server.fastmcp import FastMCP
 from sqlalchemy import and_, func, select
 
+from app.mcp._helpers import current_month, month_range
 from app.mcp.db import get_session
 from app.models.account import Account
 from app.models.category import Category
 from app.models.recurring import RecurringTransaction
 from app.models.transaction import Transaction
-
-
-def _current_month() -> str:
-    d = date.today()
-    return f"{d.year}-{d.month:02d}"
 
 
 def _prev_month(month: str) -> str:
@@ -28,7 +24,7 @@ def register(mcp: FastMCP) -> None:
     async def get_financial_summary(month: str | None = None) -> str:
         """Tổng hợp tài chính: net worth, thu chi tháng hiện tại vs tháng trước,
         tỷ lệ tiết kiệm. Format tháng: YYYY-MM."""
-        m = month or _current_month()
+        m = month or current_month()
         pm = _prev_month(m)
         async with get_session() as db:
             # Net worth
@@ -40,9 +36,9 @@ def register(mcp: FastMCP) -> None:
                 )
             ).scalar()
 
-            # Current & previous month
-            all_start = f"{pm}-01"
-            all_end = f"{m}-31"
+            # Current & previous month — span prev-month-start to current-month-end
+            all_start, _ = month_range(pm)
+            _, all_end = month_range(m)
             rows = (
                 await db.execute(
                     select(Transaction.type, Transaction.amount, Transaction.date).where(
@@ -121,9 +117,8 @@ def register(mcp: FastMCP) -> None:
     @mcp.tool()
     async def get_top_expenses(month: str | None = None, limit: int = 10) -> str:
         """Top giao dịch chi tiêu lớn nhất trong tháng. Format tháng: YYYY-MM."""
-        m = month or _current_month()
-        start = f"{m}-01"
-        end = f"{m}-31"
+        m = month or current_month()
+        start, end = month_range(m)
         async with get_session() as db:
             rows = (
                 await db.execute(

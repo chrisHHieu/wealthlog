@@ -9,11 +9,16 @@ from app.models.investment import Investment
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    async def get_portfolio() -> str:
-        """Lấy danh mục đầu tư (tên, loại, số lượng, giá mua, giá hiện tại, lãi/lỗ)."""
+    async def get_portfolio(limit: int = 50) -> str:
+        """Lấy danh mục đầu tư (tên, loại, số lượng, giá mua, giá hiện tại, lãi/lỗ).
+        - limit: tối đa bao nhiêu khoản đầu tư (mặc định 50)."""
         async with get_session() as db:
             rows = (
-                await db.execute(select(Investment).order_by(Investment.buy_date))
+                await db.execute(
+                    select(Investment)
+                    .order_by(Investment.buy_date)
+                    .limit(limit)
+                )
             ).scalars().all()
 
             if not rows:
@@ -57,4 +62,6 @@ def register(mcp: FastMCP) -> None:
                 f"\nTổng portfolio: {total_current:,.0f} VND "
                 f"(Vốn: {total_invested:,.0f} | Lãi/Lỗ: {sign}{total_pnl:,.0f} | {sign}{total_pct}%)"
             )
+            if len(rows) == limit:
+                lines.append(f"(Hiển thị {limit} khoản đầu — tăng limit nếu cần thêm)")
             return "\n".join(lines)

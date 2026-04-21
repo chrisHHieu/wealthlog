@@ -11,31 +11,33 @@ from app.models.setting import Setting
 def register(mcp: FastMCP) -> None:
     @mcp.resource("wealthlog://profile")
     async def get_profile() -> str:
-        """Thông tin người dùng và cài đặt ứng dụng."""
+        """User-specific context: name and non-default currency.
+
+        Static facts (language, theme, DB type, app name) are covered in the
+        agent's system prompt — no point re-fetching them here just to bloat
+        the cached prompt block.
+        """
         async with get_session() as db:
             rows = (await db.execute(select(Setting))).scalars().all()
             data = {r.key: r.value for r in rows}
 
-        name = data.get("userName", "Người dùng")
-        currency = data.get("currency", "VND")
-        language = data.get("language", "vi")
-        theme = data.get("theme", "system")
+        name = (data.get("userName") or "").strip()
+        currency = (data.get("currency") or "VND").strip()
 
-        return (
-            f"Tên: {name}\n"
-            f"Tiền tệ: {currency}\n"
-            f"Ngôn ngữ: {language}\n"
-            f"Theme: {theme}\n"
-            f"Database: PostgreSQL 16\n"
-            f"App: WealthLog - Quản lý tài chính cá nhân"
-        )
+        lines = []
+        if name:
+            lines.append(f"Tên: {name}")
+        if currency and currency != "VND":
+            lines.append(f"Tiền tệ: {currency}")
+
+        return "\n".join(lines) if lines else "Chưa có thông tin hồ sơ."
 
     @mcp.resource("wealthlog://categories")
     async def get_categories() -> str:
-        """Danh sách tất cả danh mục thu chi hiện có."""
+        """Danh sách danh mục thu chi (tối đa 100 — tools nhận category_name, không cần ID)."""
         async with get_session() as db:
             rows = (
-                await db.execute(select(Category).order_by(Category.name))
+                await db.execute(select(Category).order_by(Category.name).limit(100))
             ).scalars().all()
 
             if not rows:
@@ -46,46 +48,36 @@ def register(mcp: FastMCP) -> None:
             for c in rows:
                 t = type_labels.get(c.type.value, c.type.value)
                 group = f" [{c.budget_group.value}]" if c.budget_group else ""
-                lines.append(f"- {c.icon} {c.name} ({t}){group} | ID: {c.id}")
+                lines.append(f"- {c.icon} {c.name} ({t}){group}")
+            if len(rows) == 100:
+                lines.append(
+                    "\n(Đã cắt 100 danh mục đầu — còn thêm, nhưng create_transaction "
+                    "vẫn tự match theo tên)"
+                )
             return "\n".join(lines)
 
     @mcp.resource("wealthlog://guide")
     async def get_guide() -> str:
-        """Hướng dẫn sử dụng các tool WealthLog MCP."""
+        """Short cheat-sheet for external MCP clients (Claude Desktop, Inspector).
+
+        NOT preloaded into the WealthLog chat agent — that agent already has
+        tool schemas + a system prompt covering the same ground. This resource
+        is only useful when a standalone MCP client connects via stdio/SSE
+        and needs a quick orientation.
+        """
         return (
-            "# WealthLog MCP Guide\n\n"
-            "## Database\n"
-            "- PostgreSQL 16, tiền tệ mặc định VND\n"
-            "- Format tháng: YYYY-MM (e.g. 2026-04)\n"
-            "- Format ngày: YYYY-MM-DD (e.g. 2026-04-17)\n\n"
-            "## Tools theo nhóm\n\n"
-            "### Tài khoản\n"
-            "- get_accounts: danh sách tài khoản + số dư + trạng thái\n"
-            "- get_account_summary: tổng hợp theo loại\n\n"
-            "### Giao dịch\n"
-            "- search_transactions: tìm theo ngày/loại/category/keyword\n"
-            "- get_spending_by_category: chi tiêu theo danh mục\n"
-            "- get_income_by_category: thu nhập theo danh mục\n"
-            "- create_transaction / create_multiple_transactions: tạo giao dịch\n"
-            "- update_transaction / delete_transaction: sửa/xóa giao dịch\n"
-            "- Dùng resource wealthlog://categories để biết danh mục có sẵn\n"
-            "- Dùng get_accounts để biết tài khoản có sẵn\n\n"
-            "### Ngân sách\n"
-            "- get_budget_status: ngân sách vs thực chi\n\n"
-            "### Mục tiêu\n"
-            "- get_goals: danh sách + tiến độ\n\n"
-            "### Đầu tư\n"
-            "- get_portfolio: danh mục + lãi/lỗ\n\n"
-            "### Báo cáo\n"
-            "- get_financial_summary: tổng hợp so sánh tháng\n"
-            "- get_spending_trends: xu hướng nhiều tháng\n"
-            "- get_top_expenses: chi tiêu lớn nhất\n"
-            "- get_upcoming_bills: hóa đơn sắp tới\n\n"
-            "### Nâng cao\n"
-            "- get_database_schema: cấu trúc DB\n"
-            "- query_database: SQL SELECT tùy ý (PostgreSQL syntax)\n\n"
-            "## Thứ tự ưu tiên\n"
-            "1. Dùng tool chuyên dụng trước\n"
-            "2. Nếu không đủ → get_database_schema để hiểu cấu trúc\n"
-            "3. Cuối cùng → query_database với SQL tùy ý"
+            "# WealthLog MCP\n"
+            "Tools quản lý tài chính cá nhân (VND mặc định). "
+            "Format tháng: YYYY-MM. Format ngày: YYYY-MM-DD.\n\n"
+            "## Thứ tự ưu tiên khi chọn tool\n"
+            "1. Tool chuyên dụng (get_spending_by_category, get_budget_status, "
+            "get_financial_summary, get_goals, get_portfolio, search_transactions…) "
+            "— nhanh, kết quả đã format.\n"
+            "2. Chỉ dùng query_database khi câu hỏi vượt ngoài scope "
+            "(vd: group by thứ trong tuần, anomaly detection).\n"
+            "3. get_database_schema nếu cần re-fetch cấu trúc DB sau migration.\n\n"
+            "## Quy ước\n"
+            "- Tiền: luôn dương. Chiều in/out xác định qua `type`.\n"
+            "- Cột tiền là double precision → cast ::numeric trước ROUND khi viết SQL.\n"
+            "- Xem wealthlog://categories cho danh mục, wealthlog://profile cho hồ sơ user."
         )
