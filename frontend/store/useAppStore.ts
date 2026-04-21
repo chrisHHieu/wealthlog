@@ -24,10 +24,6 @@ interface AppState {
   // Chat State
   chatOpen: boolean
 
-  // Selected State
-  selectedAccountId: string | null
-  selectedTransactionId: string | null
-  
   // Actions
   toggleSidebar: () => void
   setMobileMenu: (open: boolean) => void
@@ -60,9 +56,6 @@ interface AppState {
   closeAddInvestment: () => void
   openEditInvestment: (id: string) => void
   closeEditInvestment: () => void
-  
-  selectAccount: (id: string | null) => void
-  selectTransaction: (id: string | null) => void
 }
 
 export const useAppStore = create<AppState>()(
@@ -84,9 +77,6 @@ export const useAppStore = create<AppState>()(
       
       chatOpen: false,
 
-      selectedAccountId: null,
-      selectedTransactionId: null,
-      
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
       setMobileMenu: (open) => set({ mobileMenuOpen: open }),
       setTheme: (theme) => set({ theme }),
@@ -118,9 +108,6 @@ export const useAppStore = create<AppState>()(
       closeAddInvestment: () => set({ addInvestmentOpen: false }),
       openEditInvestment: (id) => set({ addInvestmentOpen: true, editInvestmentId: id }),
       closeEditInvestment: () => set({ addInvestmentOpen: false, editInvestmentId: null }),
-      
-      selectAccount: (id) => set({ selectedAccountId: id }),
-      selectTransaction: (id) => set({ selectedTransactionId: id }),
     }),
     {
       name: 'wealthlog-app',

@@ -746,9 +746,6 @@ body::before {
   .mobile-nav {
     display: block;
   }
-  .fab {
-    bottom: 84px;
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -856,37 +853,6 @@ body::before {
   background: var(--surface-hover);
   color: var(--text-primary);
   border-color: var(--surface-border-hover);
-}
-
-/* ═══════════════════════════════════════════════════════════════════════════════
-   FAB
-   ═══════════════════════════════════════════════════════════════════════════════ */
-.fab {
-  position: fixed;
-  bottom: 28px;
-  right: 28px;
-  width: 56px;
-  height: 56px;
-  border-radius: var(--radius-full);
-  background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
-  color: var(--text-inverse);
-  border: none;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-shadow: 0 4px 20px var(--accent-green-glow), var(--elevation-3);
-  transition: all 0.2s var(--ease-spring);
-  z-index: var(--z-fab);
-}
-
-.fab:hover {
-  transform: scale(1.1) rotate(90deg);
-  box-shadow: 0 8px 32px var(--accent-green-glow), var(--elevation-4);
-}
-
-.fab:active {
-  transform: scale(0.95) rotate(90deg);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
