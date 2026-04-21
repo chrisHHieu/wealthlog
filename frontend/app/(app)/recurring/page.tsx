@@ -1,4 +1,3 @@
-import { AppLayout } from '@/components/layout/AppLayout'
 import { RecurringPage } from '@/components/recurring/RecurringPage'
 
 export const metadata = {
@@ -6,9 +5,5 @@ export const metadata = {
 }
 
 export default function Recurring() {
-  return (
-    <AppLayout>
-      <RecurringPage />
-    </AppLayout>
-  )
+  return <RecurringPage />
 }
