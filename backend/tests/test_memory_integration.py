@@ -175,27 +175,38 @@ async def test_facts_from_session_a_appear_in_session_b_prompt(db: AsyncSession)
     assert "(Thói quen)" in facts_prompt
 
 
-async def test_build_system_prompt_includes_user_facts(db: AsyncSession):
-    """Full _build_system_prompt should contain the user facts section."""
-    from app.services.agent import _build_system_prompt
+async def test_build_system_blocks_splits_stable_and_dynamic(db: AsyncSession):
+    """System prompt splits into a cached stable block + uncached dynamic block.
 
-    # Insert facts directly into DB
+    Facts and the timestamp must land in the uncached block so a new fact
+    doesn't bust the schema/resources cache.
+    """
+    from app.services.agent import _build_system_blocks
+
     db.add(UserFact(fact="Thu nhập 30 triệu", category="context"))
     db.add(UserFact(fact="Đầu tư chứng khoán", category="preference"))
     await db.flush()
 
     with _patch_get_session(db), \
          patch("app.services.agent.mcp") as mock_mcp:
-        # Mock MCP resources to avoid real MCP calls
         mock_mcp.read_resource = AsyncMock(return_value=[])
 
-        prompt = await _build_system_prompt()
+        blocks = await _build_system_blocks()
 
-    # System prompt should contain base + facts
-    assert "WealthLog AI" in prompt
-    assert "Thu nhập 30 triệu" in prompt
-    assert "Đầu tư chứng khoán" in prompt
-    assert "[Thông tin đã biết về người dùng]" in prompt
+    assert len(blocks) == 2
+    stable, dynamic = blocks
+
+    assert stable["cache_control"] == {"type": "ephemeral"}
+    assert "WealthLog AI" in stable["text"]
+    # Dynamic content must NOT leak into the cached block.
+    assert "Thời gian hiện tại" not in stable["text"]
+    assert "Thu nhập 30 triệu" not in stable["text"]
+
+    assert "cache_control" not in dynamic
+    assert "Thời gian hiện tại" in dynamic["text"]
+    assert "Thu nhập 30 triệu" in dynamic["text"]
+    assert "Đầu tư chứng khoán" in dynamic["text"]
+    assert "[Thông tin đã biết về người dùng]" in dynamic["text"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -487,10 +498,14 @@ async def test_multiple_sessions_isolated(db: AsyncSession):
 
 
 def _patch_get_session(db: AsyncSession):
-    """Redirect standalone get_session() calls to the test transaction."""
+    """Redirect all service-layer get_session() calls to the test transaction."""
+    from contextlib import ExitStack
 
     @asynccontextmanager
     async def _mock():
         yield db
 
-    return patch("app.services.memory.get_session", _mock)
+    stack = ExitStack()
+    stack.enter_context(patch("app.services.memory.get_session", _mock))
+    stack.enter_context(patch("app.services.summary.get_session", _mock))
+    return stack
