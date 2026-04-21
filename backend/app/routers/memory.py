@@ -1,6 +1,7 @@
 """User facts (long-term memory) management endpoints."""
 
 import uuid
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -17,52 +18,93 @@ class FactResponse(CamelModel):
     id: uuid.UUID
     fact: str
     category: str
-    created_at: str
-    updated_at: str
+    importance: int
+    expires_at: datetime | None
+    access_count: int
+    last_accessed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
 
 
 class FactCreate(CamelModel):
     fact: str
     category: str = "general"
+    importance: int = 5
+    expires_at: datetime | None = None
+
+
+class FactUpdate(CamelModel):
+    fact: str
+    category: str
+    importance: int
+    expires_at: datetime | None = None
+
+
+def _to_response(r: UserFact) -> FactResponse:
+    return FactResponse(
+        id=r.id,
+        fact=r.fact,
+        category=r.category,
+        importance=r.importance,
+        expires_at=r.expires_at,
+        access_count=r.access_count,
+        last_accessed_at=r.last_accessed_at,
+        created_at=r.created_at,
+        updated_at=r.updated_at,
+    )
 
 
 @router.get("/facts", response_model=list[FactResponse])
 async def list_facts(db: AsyncSession = Depends(get_db)):
-    """List all user facts."""
+    """List all user facts ordered by importance then recency."""
     rows = (
         await db.execute(
-            select(UserFact).order_by(UserFact.updated_at.desc())
+            select(UserFact).order_by(
+                UserFact.importance.desc(),
+                UserFact.updated_at.desc(),
+            )
         )
     ).scalars().all()
-
-    return [
-        FactResponse(
-            id=r.id,
-            fact=r.fact,
-            category=r.category,
-            created_at=r.created_at.isoformat(),
-            updated_at=r.updated_at.isoformat(),
-        )
-        for r in rows
-    ]
+    return [_to_response(r) for r in rows]
 
 
-@router.post("/facts", response_model=FactResponse)
+@router.post("/facts", response_model=FactResponse, status_code=201)
 async def create_fact(
     body: FactCreate,
     db: AsyncSession = Depends(get_db),
 ):
     """Manually add a user fact."""
-    fact = UserFact(fact=body.fact, category=body.category)
+    fact = UserFact(
+        fact=body.fact,
+        category=body.category,
+        importance=body.importance,
+        expires_at=body.expires_at,
+    )
     db.add(fact)
     await db.flush()
-    return FactResponse(
-        id=fact.id,
-        fact=fact.fact,
-        category=fact.category,
-        created_at=fact.created_at.isoformat(),
-        updated_at=fact.updated_at.isoformat(),
-    )
+    await db.refresh(fact)
+    return _to_response(fact)
+
+
+@router.put("/facts/{fact_id}", response_model=FactResponse)
+async def update_fact(
+    fact_id: uuid.UUID,
+    body: FactUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """Update a user fact in-place (preserves access stats and history)."""
+    result = await db.execute(select(UserFact).where(UserFact.id == fact_id))
+    fact = result.scalar_one_or_none()
+    if not fact:
+        raise HTTPException(status_code=404, detail="Fact not found")
+
+    fact.fact = body.fact
+    fact.category = body.category
+    fact.importance = body.importance
+    fact.expires_at = body.expires_at
+    await db.flush()
+    await db.refresh(fact)
+    return _to_response(fact)
 
 
 @router.delete("/facts/{fact_id}")
@@ -71,9 +113,7 @@ async def delete_fact(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a user fact."""
-    result = await db.execute(
-        select(UserFact).where(UserFact.id == fact_id)
-    )
+    result = await db.execute(select(UserFact).where(UserFact.id == fact_id))
     fact = result.scalar_one_or_none()
     if not fact:
         raise HTTPException(status_code=404, detail="Fact not found")

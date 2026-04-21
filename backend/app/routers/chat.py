@@ -1,8 +1,9 @@
 """Chat endpoint — streams AI agent responses via SSE with session persistence."""
 
+import asyncio
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -21,6 +22,7 @@ from app.schemas.chat import (
 )
 from app.services.agent import run_agent_stream
 from app.services.memory import maybe_trigger_review
+from app.services.summary import maybe_summarize_stale_sessions
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -249,6 +251,11 @@ async def chat(request: ChatRequest) -> StreamingResponse:
             if session.title == "New chat":
                 session.title = latest_user.content[:100]
 
+    # Fire-and-forget: backfill summaries for other idle sessions so the next
+    # system prompt can reference them. Current session is excluded — we never
+    # summarize a live conversation mid-turn.
+    asyncio.create_task(maybe_summarize_stale_sessions(exclude_session_id=session_id))
+
     # Load canonical history from DB (includes the just-saved user message)
     async with get_session() as load_db:
         result = await load_db.execute(
@@ -264,7 +271,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         pending_rows: list[ChatMessage] = []
         collected_final_text = ""
 
-        async for event in run_agent_stream(messages):
+        async for event in run_agent_stream(messages, session_id=session_id):
             name, data = _parse_sse(event)
 
             if name == "_persist_assistant":
@@ -301,7 +308,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                     # relying on server_default would collapse all rows to the same
                     # instant and a later UUID tiebreak would scramble tool_use/
                     # tool_result pairing — Claude rejects that with a 400.
-                    base_time = datetime.now(timezone.utc)
+                    base_time = datetime.now(UTC)
                     async with get_session() as save_db:
                         for i, row in enumerate(pending_rows):
                             row.created_at = base_time + timedelta(microseconds=i)
