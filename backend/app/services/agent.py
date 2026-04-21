@@ -1,8 +1,10 @@
 """AI Agent service — connects Claude API to MCP tools."""
 
+import asyncio
 import json
+import uuid
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta, timezone
 
 import anthropic
 
@@ -11,40 +13,50 @@ from app.logging_config import get_logger
 from app.mcp.server import mcp
 from app.mcp.tools_discovery import build_schema_summary
 from app.services.memory import build_facts_prompt
+from app.services.summary import build_summaries_prompt, summarize_session
+from app.services.token_budget import estimate_request_tokens
 
 logger = get_logger(__name__)
 
 _SYSTEM_BASE = (
-    "Bạn là WealthLog AI — trợ lý tài chính cá nhân thông minh. "
-    "Bạn giúp người dùng quản lý thu chi, ngân sách, mục tiêu tiết kiệm và đầu tư.\n\n"
-    "Quy tắc chung:\n"
-    "- Luôn dùng tool để lấy dữ liệu thực, KHÔNG bịa số liệu.\n"
-    "- Tiền tệ mặc định: VND. Format số: dùng dấu phẩy (ví dụ: 1,000,000).\n"
-    "- Format tháng: YYYY-MM. Format ngày: YYYY-MM-DD.\n"
-    "- Trả lời ngắn gọn, rõ ràng, có insight.\n"
-    "- Khi user hỏi tổng quan, gọi nhiều tool để có bức tranh đầy đủ.\n"
-    "- Đưa ra lời khuyên cụ thể khi phù hợp.\n"
-    "- Khi tạo giao dịch, dùng đúng category_name từ danh sách bên dưới.\n\n"
-    "Thứ tự ưu tiên khi chọn tool:\n"
-    "1. ƯU TIÊN tool chuyên dụng (get_spending_by_category, get_budget_status, "
+    "You are WealthLog AI — an intelligent personal finance assistant. "
+    "You help users manage income, expenses, budgets, savings goals, and investments.\n\n"
+    "Language:\n"
+    "- Respond in the SAME language the user writes in. Default to Vietnamese "
+    "when the user's language is ambiguous (one-word messages, emoji-only, etc.).\n\n"
+    "General rules:\n"
+    "- Always use tools to fetch real data. NEVER fabricate numbers.\n"
+    "- Default currency: VND. Number format: use commas (e.g., 1,000,000).\n"
+    "- Month format: YYYY-MM. Date format: YYYY-MM-DD.\n"
+    "- Keep answers concise, clear, with insight.\n"
+    "- For overview questions, call multiple tools to build a complete picture.\n"
+    "- Give specific advice when appropriate.\n"
+    "- When creating transactions, use the exact category_name from the list below.\n\n"
+    "Tool selection priority:\n"
+    "1. PREFER specialized tools (get_spending_by_category, get_budget_status, "
     "get_financial_summary, get_goals, get_portfolio, search_transactions…) "
-    "— nhanh, an toàn, kết quả đã format.\n"
-    "2. Chỉ dùng query_database khi câu hỏi VƯỢT NGOÀI phạm vi tool chuyên dụng "
-    "(vd: group by thứ trong tuần, anomaly detection, analytics đặc biệt).\n"
-    "3. Schema database đã có trong block <database_schema> bên dưới — "
-    "ĐỌC nó trước khi viết SQL. KHÔNG cần gọi get_database_schema nữa.\n\n"
-    "Khi viết SQL:\n"
-    "- Xem enum values ([enum: A | B | C]) và foreign keys (→ table.col) trong schema.\n"
-    "- Cột tiền là double precision → cast ::numeric trước ROUND nếu cần.\n"
-    "- Trả số thô, format ở câu trả lời.\n"
-    "- Nếu lỗi, đọc 'Gợi ý' trong error message — nó chỉ ra nguyên nhân cụ thể."
+    "— fast, safe, pre-formatted.\n"
+    "2. Use query_database ONLY when the question goes BEYOND specialized-tool scope "
+    "(e.g., group by weekday, anomaly detection, custom analytics).\n"
+    "3. Database schema is in the <database_schema> block below — READ it before "
+    "writing SQL. No need to call get_database_schema again.\n\n"
+    "Writing SQL:\n"
+    "- Check enum values ([enum: A | B | C]) and foreign keys (→ table.col) in schema.\n"
+    "- Money columns are double precision → cast ::numeric before ROUND when needed.\n"
+    "- Return raw numbers; format in the reply text.\n"
+    "- On error, read the 'Hint' field — it points to the root cause.\n\n"
+    "Context truncation:\n"
+    "- If you see a message starting with '[System: N older turns were truncated' / "
+    "'[System: N lượt cũ đã bị lược bỏ', DO NOT try to reconstruct the dropped "
+    "content. Use user facts and session summaries from the system prompt to "
+    "answer questions about earlier conversation history."
 )
 
-# MCP resource URIs to inject into system prompt
+# MCP resource URIs to inject into system prompt.
+# The guide resource was dropped — tool docstrings + _SYSTEM_BASE already cover that ground.
 _RESOURCE_URIS = [
     "wealthlog://profile",
     "wealthlog://categories",
-    "wealthlog://guide",
 ]
 
 
@@ -56,14 +68,20 @@ def _now_vn() -> str:
     return f"{weekdays[now.weekday()]}, {now.strftime('%d/%m/%Y %H:%M')} (GMT+7)"
 
 
-async def _build_system_prompt() -> str:
-    """Build system prompt with live MCP resources, schema, and user facts injected."""
-    sections = [f"Thời gian hiện tại: {_now_vn()}\n\n{_SYSTEM_BASE}"]
+async def _build_system_blocks() -> list[dict]:
+    """Build the system prompt as two blocks: stable (cached) + dynamic (uncached).
 
-    # Preload DB schema so the agent never has to guess enum/FK/column info.
+    The stable block — base instructions, DB schema, MCP resources — is marked
+    ``cache_control: ephemeral`` so Anthropic reuses it for 5 minutes. Anything
+    that changes per-request (timestamp, summaries, facts) lives in a trailing
+    uncached block; otherwise a single fact update or ticking minute would bust
+    the cache on the multi-KB schema every turn.
+    """
+    stable_parts = [_SYSTEM_BASE]
+
     try:
         schema = await build_schema_summary()
-        sections.append(f"\n---\n<database_schema>\n{schema}\n</database_schema>")
+        stable_parts.append(f"\n---\n<database_schema>\n{schema}\n</database_schema>")
     except Exception:
         logger.warning("Failed to preload database schema")
 
@@ -72,27 +90,31 @@ async def _build_system_prompt() -> str:
             contents = await mcp.read_resource(uri)
             for item in contents:
                 if hasattr(item, "content") and item.content:
-                    sections.append(f"\n---\n## {uri}\n{item.content}")
+                    stable_parts.append(f"\n---\n## {uri}\n{item.content}")
         except Exception:
             logger.warning("Failed to load resource: %s", uri)
 
-    # Inject long-term user facts
+    dynamic_parts = [f"Thời gian hiện tại: {_now_vn()}"]
+
+    summaries_block = await build_summaries_prompt()
+    if summaries_block:
+        dynamic_parts.append(f"\n---\n{summaries_block}")
+
     facts_block = await build_facts_prompt()
     if facts_block:
-        sections.append(f"\n---\n{facts_block}")
+        dynamic_parts.append(f"\n---\n{facts_block}")
 
-    return "\n".join(sections)
-
-
-def _system_with_cache(system_text: str) -> list[dict]:
-    """Wrap system prompt as a cacheable content block (Anthropic prompt caching).
-    Schema is ~several KB and stable across requests — caching amortizes the
-    token cost across all requests within the 5-minute TTL window."""
-    return [{
-        "type": "text",
-        "text": system_text,
-        "cache_control": {"type": "ephemeral"},
-    }]
+    return [
+        {
+            "type": "text",
+            "text": "\n".join(stable_parts),
+            "cache_control": {"type": "ephemeral"},
+        },
+        {
+            "type": "text",
+            "text": "\n".join(dynamic_parts),
+        },
+    ]
 
 # Max tool-call iterations to prevent infinite loops
 MAX_ITERATIONS = 15
@@ -132,10 +154,10 @@ async def _execute_tool(name: str, arguments: dict) -> str:
         elif isinstance(contents, str):
             texts.append(contents)
 
-        return "\n".join(texts) if texts else "Không có kết quả."
+        return "\n".join(texts) if texts else "No results."
     except Exception as e:
         logger.exception("Tool execution error: %s", name)
-        return f"Lỗi khi gọi tool {name}: {e}"
+        return f"Error calling tool {name}: {e}"
 
 
 def _truncate_tool_result(text: str, max_chars: int) -> str:
@@ -153,7 +175,7 @@ def _truncate_tool_result(text: str, max_chars: int) -> str:
     remaining = len(text) - len(truncated)
     return (
         f"{truncated}\n\n"
-        f"[... cắt bớt {remaining:,} ký tự. Gọi lại với limit nhỏ hơn để xem chi tiết.]"
+        f"[... {remaining:,} chars truncated. Re-call with a smaller limit for details.]"
     )
 
 
@@ -218,35 +240,164 @@ def _compact_tool_results(messages: list[dict], max_chars: int) -> list[dict]:
     return out
 
 
+def _prepend_truncation_note(messages: list[dict], dropped: int) -> list[dict]:
+    """Inject a bilingual system note into the first user message.
+
+    Anthropic requires the first message to be ``user`` and forbids orphan
+    system turns mid-conversation, so we piggyback on the user content instead
+    of inserting a new message. Handles both string and block-list content.
+    The note is bilingual (EN + VN) so the agent's language-matching rule
+    works regardless of which language the user is currently writing in.
+    """
+    note = (
+        f"[System: {dropped} older turns were truncated due to context limits. "
+        f"Refer to user facts and session summaries in the system prompt for "
+        f"earlier context. — {dropped} lượt cũ đã bị lược bỏ do giới hạn ngữ "
+        f"cảnh; xem user facts và session summaries trong system prompt.]\n\n"
+    )
+    out = list(messages)
+    for i, msg in enumerate(out):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content")
+        if isinstance(content, str):
+            out[i] = {"role": "user", "content": note + content}
+        elif isinstance(content, list):
+            out[i] = {
+                "role": "user",
+                "content": [{"type": "text", "text": note}, *content],
+            }
+        break
+    return out
+
+
+def _turn_size_chars(turn: list[dict]) -> int:
+    """Approximate char count of a turn — covers all block types we emit.
+
+    Not token-accurate (use ``token_budget.estimate_request_tokens`` for that),
+    but cheap and monotonic, which is all we need to decide whether a turn
+    crossed the per-turn cap.
+    """
+    total = 0
+    for msg in turn:
+        content = msg.get("content")
+        if isinstance(content, str):
+            total += len(content)
+        elif isinstance(content, list):
+            for block in content:
+                if not isinstance(block, dict):
+                    continue
+                btype = block.get("type")
+                if btype == "text":
+                    total += len(block.get("text", ""))
+                elif btype == "thinking":
+                    total += len(block.get("thinking", ""))
+                elif btype == "tool_use":
+                    total += len(json.dumps(block.get("input") or {}))
+                elif btype == "tool_result":
+                    c = block.get("content")
+                    if isinstance(c, str):
+                        total += len(c)
+                    elif isinstance(c, list):
+                        for b in c:
+                            if isinstance(b, dict):
+                                total += len(b.get("text", ""))
+    return total
+
+
+def _cap_oversized_turn(
+    turn: list[dict],
+    max_chars: int,
+    fallback_chars: int,
+) -> list[dict]:
+    """If a recent turn is too bloated, compact all but its last tool_result.
+
+    A single bad turn (e.g. the agent chained 15 tool calls) can blow the
+    context budget on its own. We keep the last tool_result at full size
+    because the final assistant answer was most likely grounded in it, and
+    shrink earlier tool_results to the middle-tier limit. If there's only one
+    tool_result in the turn, we shrink that — there's nothing else to choose.
+    """
+    if _turn_size_chars(turn) <= max_chars:
+        return turn
+
+    result_indices = [
+        i for i, msg in enumerate(turn)
+        if isinstance(msg.get("content"), list) and any(
+            isinstance(b, dict) and b.get("type") == "tool_result"
+            for b in msg["content"]
+        )
+    ]
+    if len(result_indices) <= 1:
+        return _compact_tool_results(turn, fallback_chars)
+
+    keep_last = result_indices[-1]
+    out: list[dict] = []
+    for i, msg in enumerate(turn):
+        if i == keep_last or i not in result_indices:
+            out.append(msg)
+        else:
+            out.extend(_compact_tool_results([msg], fallback_chars))
+    return out
+
+
 def _compact_history(
     messages: list[dict],
+    max_turns: int,
     keep_recent_turns: int,
     old_tool_result_chars: int,
-) -> list[dict]:
-    """Compact prior turns' tool_result payloads while preserving full structure.
+    recent_turn_max_chars: int,
+) -> tuple[list[dict], int]:
+    """Apply 3-tier compaction; return (compacted_messages, dropped_turn_count).
 
-    tool_use blocks stay verbatim so the agent still sees which tools were
-    called with which args across the whole session — it just doesn't re-read
-    the verbose results. Recent turns pass through untouched.
+    - Oldest turns beyond ``max_turns`` are dropped entirely; a bilingual
+      system note is injected into the first remaining user message. Long-term
+      facts + session summaries carry the semantic load.
+    - Middle turns (between the drop boundary and the recent window) keep
+      their structure but have tool_result payloads truncated.
+    - Recent turns pass through verbatim, except for ones whose own size
+      exceeds ``recent_turn_max_chars`` — those fall back to middle-tier
+      truncation on all but their last tool_result.
+
+    The dropped count is returned so callers can trigger a mid-session summary
+    before the content is gone from the conversation forever.
     """
     turns = _split_turns(messages)
-    if len(turns) <= keep_recent_turns:
-        return messages
+    n = len(turns)
 
-    old = turns[:-keep_recent_turns]
-    recent = turns[-keep_recent_turns:]
+    # Short session: no middle tier, no drops — just guard against one-turn
+    # bloat so an early chain of 15 tool calls can't blow budget by itself.
+    if n <= keep_recent_turns:
+        out: list[dict] = []
+        for turn in turns:
+            out.extend(_cap_oversized_turn(
+                turn, recent_turn_max_chars, old_tool_result_chars,
+            ))
+        return out, 0
+
+    recent_start = n - keep_recent_turns
+    middle_start = max(0, n - max_turns)
+    dropped = middle_start
+
+    middle = turns[middle_start:recent_start]
+    recent = turns[recent_start:]
 
     compacted: list[dict] = []
-    for turn in old:
+    for turn in middle:
         compacted.extend(_compact_tool_results(turn, old_tool_result_chars))
     for turn in recent:
-        compacted.extend(turn)
+        compacted.extend(_cap_oversized_turn(
+            turn, recent_turn_max_chars, old_tool_result_chars,
+        ))
+
+    if dropped > 0:
+        compacted = _prepend_truncation_note(compacted, dropped)
 
     logger.info(
-        "History compacted: %d turns → kept %d recent, compacted %d old",
-        len(turns), len(recent), len(old),
+        "History compacted: %d turns → dropped=%d middle=%d recent=%d",
+        n, dropped, len(middle), len(recent),
     )
-    return compacted
+    return compacted, dropped
 
 
 # SSE event types
@@ -285,6 +436,7 @@ def _build_thinking_param() -> dict | None:
 
 async def run_agent_stream(
     messages: list[dict],
+    session_id: uuid.UUID | None = None,
 ) -> AsyncGenerator[str, None]:
     """Run the agent loop, yielding SSE events in ReAct order.
 
@@ -304,16 +456,39 @@ async def run_agent_stream(
     """
     client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
     tools = await _get_tools_for_claude()
-    system_prompt = await _build_system_prompt()
+    system_blocks = await _build_system_blocks()
 
     max_result_chars = settings.agent_tool_result_max_chars
     thinking_param = _build_thinking_param()
 
-    claude_messages = _compact_history(
+    claude_messages, dropped = _compact_history(
         [{"role": m["role"], "content": m["content"]} for m in messages],
+        max_turns=settings.agent_max_turns_in_context,
         keep_recent_turns=settings.agent_keep_recent_turns,
         old_tool_result_chars=settings.agent_old_turn_tool_result_chars,
+        recent_turn_max_chars=settings.agent_recent_turn_max_chars,
     )
+
+    # Turns just fell off the live window. Refresh the episodic summary now so
+    # the content isn't lost until the 30-min idle sweep catches up — otherwise
+    # long back-to-back sessions leak context between the drop and next idle.
+    if dropped > 0 and session_id is not None:
+        asyncio.create_task(summarize_session(session_id))
+
+    # One pre-send token count per request. We skip recounting on follow-up
+    # iterations because later iterations only append tool_results to the same
+    # request shape — within a bounded factor of the first count — and the
+    # endpoint round-trip isn't free of latency.
+    est_tokens = await estimate_request_tokens(
+        client, settings.agent_model, system_blocks, claude_messages, tools,
+    )
+    if est_tokens is not None:
+        logger.info("Pre-send input tokens: %d", est_tokens)
+        if est_tokens > settings.agent_max_input_tokens:
+            logger.warning(
+                "Input tokens %d exceed soft budget %d — context may be unhealthy",
+                est_tokens, settings.agent_max_input_tokens,
+            )
 
     for iteration in range(MAX_ITERATIONS):
         logger.info("Agent iteration %d", iteration + 1)
@@ -328,7 +503,7 @@ async def run_agent_stream(
         stream_kwargs: dict = {
             "model": settings.agent_model,
             "max_tokens": settings.agent_max_tokens,
-            "system": _system_with_cache(system_prompt),
+            "system": system_blocks,
             "messages": claude_messages,
             "tools": tools,
         }
