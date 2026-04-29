@@ -1,15 +1,15 @@
 """Pydantic v2 schemas — central registry."""
 
-from app.schemas.account import AccountCreate, AccountResponse, AccountUpdate
-from app.schemas.budget import (
+from app.schemas.finance.account import AccountCreate, AccountResponse, AccountUpdate
+from app.schemas.finance.budget import (
     BudgetCheckResponse,
     BudgetCreate,
     BudgetResponse,
     BudgetUpdate,
 )
-from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
+from app.schemas.finance.category import CategoryCreate, CategoryResponse, CategoryUpdate
 from app.schemas.dashboard import DashboardResponse
-from app.schemas.goal import (
+from app.schemas.finance.goal import (
     GoalAddAmount,
     GoalContributionResponse,
     GoalCreate,
@@ -21,10 +21,10 @@ from app.schemas.investment import (
     InvestmentResponse,
     InvestmentUpdate,
 )
-from app.schemas.recurring import RecurringCreate, RecurringResponse, RecurringUpdate
+from app.schemas.finance.recurring import RecurringCreate, RecurringResponse, RecurringUpdate
 from app.schemas.reports import ReportsResponse
 from app.schemas.setting import SettingsResponse, SettingsUpdate
-from app.schemas.transaction import (
+from app.schemas.finance.transaction import (
     TransactionCreate,
     TransactionListResponse,
     TransactionResponse,

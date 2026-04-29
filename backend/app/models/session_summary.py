@@ -27,6 +27,11 @@ class SessionSummary(Base, UUIDMixin, TimestampMixin):
     )
     summary: Mapped[str] = mapped_column(Text)
     key_topics: Mapped[list[str]] = mapped_column(_JSONField, default=list)
+    # One-sentence "what got done" — separate from the narrative summary so
+    # the retrieval-time prompt block can render a tight one-liner per session
+    # instead of paying for the full summary every turn. Nullable: legacy rows
+    # written before this column existed simply won't have one.
+    outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", name="uq_session_summaries_session_id"),

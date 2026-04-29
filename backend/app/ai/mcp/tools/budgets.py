@@ -1,0 +1,80 @@
+"""MCP tools for budgets."""
+
+from mcp.server.fastmcp import FastMCP
+from sqlalchemy import and_, func, select
+
+from app.core.time import current_month, month_range
+from app.database import get_session
+from app.models.budget import Budget
+from app.models.category import Category
+from app.models.transaction import Transaction
+
+
+def register(mcp: FastMCP) -> None:
+    @mcp.tool()
+    async def get_budget_status(month: str | None = None) -> str:
+        """Monthly budget status: budgeted vs actual spend per category.
+        Month format: YYYY-MM."""
+        m = month or current_month()
+        start, end = month_range(m)
+        async with get_session() as db:
+            budgets = (
+                await db.execute(
+                    select(
+                        Budget.category_id,
+                        Budget.amount,
+                        Category.name,
+                        Category.icon,
+                    )
+                    .outerjoin(Category, Budget.category_id == Category.id)
+                    .where(Budget.month == m)
+                )
+            ).all()
+
+            if not budgets:
+                return f"Month {m}: no budgets set."
+
+            spending = (
+                await db.execute(
+                    select(
+                        Transaction.category_id,
+                        func.sum(Transaction.amount).label("total"),
+                    )
+                    .where(
+                        and_(
+                            Transaction.type == "expense",
+                            Transaction.date >= start,
+                            Transaction.date <= end,
+                        )
+                    )
+                    .group_by(Transaction.category_id)
+                )
+            ).all()
+            spent_map = {str(r.category_id): r.total for r in spending}
+
+            lines = [f"Budget for {m}:"]
+            total_budget = 0.0
+            total_spent = 0.0
+            for b in budgets:
+                cat_name = b.name or "Uncategorized"
+                cat_icon = b.icon or "📦"
+                spent = spent_map.get(str(b.category_id), 0)
+                pct = round((spent / b.amount) * 100) if b.amount > 0 else 0
+                if spent > b.amount:
+                    status = "OVER"
+                elif pct >= 80:
+                    status = "WARN"
+                else:
+                    status = "OK"
+                lines.append(
+                    f"- {cat_icon} {cat_name}: {spent:,.0f}/{b.amount:,.0f} VND "
+                    f"({pct}%) [{status}]"
+                )
+                total_budget += b.amount
+                total_spent += spent
+
+            overall_pct = round((total_spent / total_budget) * 100) if total_budget > 0 else 0
+            lines.append(
+                f"\nTotal: {total_spent:,.0f}/{total_budget:,.0f} VND ({overall_pct}%)"
+            )
+            return "\n".join(lines)

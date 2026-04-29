@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
@@ -29,7 +30,24 @@ async_session = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession]:
-    """Dependency that provides an async database session."""
+    """FastAPI dependency that yields a committed-on-success session."""
+    async with async_session() as session:
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise
+
+
+@asynccontextmanager
+async def get_session() -> AsyncGenerator[AsyncSession]:
+    """Context-manager session for code outside FastAPI's DI graph.
+
+    Used by MCP tool handlers, background services, and the agent runner —
+    anything that doesn't go through ``Depends(get_db)``. Same commit/rollback
+    semantics as ``get_db``.
+    """
     async with async_session() as session:
         try:
             yield session

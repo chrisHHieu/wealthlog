@@ -13,16 +13,16 @@ from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.models.chat import ChatMessage, ChatSession
-from app.schemas.chat import (
+from app.schemas.ai.chat import (
     ChatRequest,
     SessionCreate,
     SessionDetailResponse,
     SessionResponse,
     SessionUpdate,
 )
-from app.services.agent import run_agent_stream
-from app.services.memory import maybe_trigger_review
-from app.services.summary import maybe_summarize_stale_sessions
+from app.ai.agent import run_agent_stream
+from app.ai.memory.episodic import maybe_summarize_stale_sessions
+from app.ai.memory.facts import maybe_trigger_review
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -222,7 +222,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
     stored as its own row so follow-up turns see the exact prior conversation,
     tool calls included.
     """
-    from app.mcp.db import get_session
+    from app.database import get_session
 
     # Resolve or create session + persist the new user message
     async with get_session() as db:

@@ -12,7 +12,7 @@ from app.logging_config import get_logger
 from app.models.budget import Budget
 from app.models.category import Category
 from app.models.transaction import Transaction
-from app.schemas.budget import BudgetCheckResponse, BudgetCreate, BudgetResponse
+from app.schemas.finance.budget import BudgetCheckResponse, BudgetCreate, BudgetResponse
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/budgets", tags=["budgets"])

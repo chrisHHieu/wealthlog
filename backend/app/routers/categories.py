@@ -10,7 +10,7 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.category import Category
 from app.models.transaction import Transaction
-from app.schemas.category import CategoryCreate, CategoryResponse, CategoryUpdate
+from app.schemas.finance.category import CategoryCreate, CategoryResponse, CategoryUpdate
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/categories", tags=["categories"])

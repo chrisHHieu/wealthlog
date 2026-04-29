@@ -12,7 +12,7 @@ from app.logging_config import get_logger
 from app.models.account import Account
 from app.models.category import Category
 from app.models.transaction import Transaction
-from app.schemas.transaction import (
+from app.schemas.finance.transaction import (
     TransactionCreate,
     TransactionResponse,
     TransactionUpdate,

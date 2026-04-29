@@ -10,7 +10,7 @@ from app.database import get_db
 from app.logging_config import get_logger
 from app.models.account import Account
 from app.models.transaction import Transaction
-from app.schemas.account import AccountCreate, AccountResponse, AccountUpdate
+from app.schemas.finance.account import AccountCreate, AccountResponse, AccountUpdate
 from app.services.recurring_sync import process_recurring
 
 logger = get_logger(__name__)

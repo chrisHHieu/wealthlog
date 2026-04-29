@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.logging_config import get_logger
 from app.models.goal import Goal, GoalContribution
-from app.schemas.goal import GoalAddAmount, GoalCreate, GoalResponse, GoalUpdate
+from app.schemas.finance.goal import GoalAddAmount, GoalCreate, GoalResponse, GoalUpdate
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/goals", tags=["goals"])

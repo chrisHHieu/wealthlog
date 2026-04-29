@@ -11,7 +11,7 @@ from app.logging_config import get_logger
 from app.models.account import Account
 from app.models.category import Category
 from app.models.recurring import RecurringTransaction
-from app.schemas.recurring import RecurringCreate, RecurringResponse, RecurringUpdate
+from app.schemas.finance.recurring import RecurringCreate, RecurringResponse, RecurringUpdate
 from app.services.recurring_sync import process_recurring
 
 logger = get_logger(__name__)
