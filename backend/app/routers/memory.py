@@ -19,6 +19,7 @@ class FactResponse(CamelModel):
     fact: str
     category: str
     importance: int
+    topics: list[str]
     expires_at: datetime | None
     access_count: int
     last_accessed_at: datetime | None
@@ -30,6 +31,7 @@ class FactCreate(CamelModel):
     fact: str
     category: str = "general"
     importance: int = 5
+    topics: list[str] = []
     expires_at: datetime | None = None
 
 
@@ -37,6 +39,8 @@ class FactUpdate(CamelModel):
     fact: str
     category: str
     importance: int
+    topics: list[str] = []
+    verified_by_user: bool | None = None
     expires_at: datetime | None = None
 
 
@@ -46,6 +50,7 @@ def _to_response(r: UserFact) -> FactResponse:
         fact=r.fact,
         category=r.category,
         importance=r.importance,
+        topics=r.topics or [],
         expires_at=r.expires_at,
         access_count=r.access_count,
         last_accessed_at=r.last_accessed_at,
@@ -78,6 +83,7 @@ async def create_fact(
         fact=body.fact,
         category=body.category,
         importance=body.importance,
+        topics=body.topics,
         expires_at=body.expires_at,
     )
     db.add(fact)
@@ -101,7 +107,10 @@ async def update_fact(
     fact.fact = body.fact
     fact.category = body.category
     fact.importance = body.importance
+    fact.topics = body.topics
     fact.expires_at = body.expires_at
+    if body.verified_by_user is not None:
+        fact.verified_by_user = body.verified_by_user
     await db.flush()
     await db.refresh(fact)
     return _to_response(fact)

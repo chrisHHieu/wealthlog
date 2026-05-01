@@ -23,6 +23,7 @@ from app.schemas.ai.chat import (
 from app.ai.agent import run_agent_stream
 from app.ai.memory.episodic import maybe_summarize_stale_sessions
 from app.ai.memory.facts import maybe_trigger_review
+from app.ai.memory.synthesis import maybe_synthesize_user_model
 
 router = APIRouter(prefix="/api", tags=["chat"])
 
@@ -179,6 +180,42 @@ async def delete_session(
     return {"ok": True}
 
 
+# ── Model catalogue ─────────────────────────────────────────────────────────
+
+_ANTHROPIC_MODELS = [
+    {"id": "claude-sonnet-4-6",        "name": "Claude Sonnet 4.6",  "description": "Cân bằng tốc độ và chất lượng"},
+    {"id": "claude-haiku-4-5-20251001","name": "Claude Haiku 4.5",   "description": "Nhanh nhất, tiết kiệm chi phí"},
+]
+
+_DEEPSEEK_MODELS = [
+    {"id": "deepseek-v4-pro",  "name": "DeepSeek V4 Pro",   "description": "Mạnh, chi phí thấp hơn Claude"},
+    {"id": "deepseek-v4-flash","name": "DeepSeek V4 Flash",  "description": "Nhanh nhất, rẻ nhất"},
+]
+
+
+@router.get("/chat/models")
+async def list_models():
+    """Return all available models. DeepSeek models appear only when DEEPSEEK_API_KEY is set."""
+    from app.ai.model_registry import get_preferred_model
+    from app.config import settings
+    models = list(_ANTHROPIC_MODELS)
+    if settings.deepseek_api_key:
+        models += _DEEPSEEK_MODELS
+    preferred = await get_preferred_model()
+    return {"models": models, "default": preferred}
+
+
+@router.put("/chat/models/preferred")
+async def set_preferred_model(body: dict):
+    """Persist the user's preferred model so all AI features use it."""
+    from app.ai.model_registry import set_preferred_model as _set
+    model_id = body.get("model")
+    if not model_id or not isinstance(model_id, str):
+        raise HTTPException(status_code=400, detail="Missing 'model' field")
+    await _set(model_id)
+    return {"ok": True, "model": model_id}
+
+
 # ── Chat (SSE streaming) ────────────────────────────────────────────────────
 
 
@@ -271,7 +308,7 @@ async def chat(request: ChatRequest) -> StreamingResponse:
         pending_rows: list[ChatMessage] = []
         collected_final_text = ""
 
-        async for event in run_agent_stream(messages, session_id=session_id):
+        async for event in run_agent_stream(messages, session_id=session_id, model=request.model):
             name, data = _parse_sse(event)
 
             if name == "_persist_assistant":
@@ -332,6 +369,10 @@ async def chat(request: ChatRequest) -> StreamingResponse:
                     await maybe_trigger_review(session_id, text_history + [
                         {"role": "assistant", "content": collected_final_text},
                     ])
+                    # Synthesis fires much less often (every N sessions) — the
+                    # internal cadence check makes this call effectively free
+                    # when not enough new sessions have accumulated.
+                    asyncio.create_task(maybe_synthesize_user_model())
 
     async def stream_with_session_id():
         yield f"event: session\ndata: {json.dumps({'session_id': str(session_id)})}\n\n"

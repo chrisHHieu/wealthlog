@@ -7,6 +7,8 @@ from collections.abc import AsyncGenerator
 
 import anthropic
 
+from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+
 from app.ai.agent.compaction import _compact_history, _truncate_tool_result
 from app.ai.agent.prompt import build_system_blocks
 from app.ai.agent.streaming import (
@@ -17,7 +19,6 @@ from app.ai.agent.streaming import (
     EVENT_TEXT_DELTA,
     EVENT_TEXT_START,
     EVENT_TEXT_STOP,
-    EVENT_THINKING_DELTA,
     EVENT_THINKING_START,
     EVENT_THINKING_STOP,
     EVENT_TOOL_DONE,
@@ -47,6 +48,7 @@ def _build_thinking_param() -> dict | None:
 async def run_agent_stream(
     messages: list[dict],
     session_id: uuid.UUID | None = None,
+    model: str | None = None,
 ) -> AsyncGenerator[str, None]:
     """Run the agent loop, yielding SSE events in ReAct order.
 
@@ -64,7 +66,8 @@ async def run_agent_stream(
     - done:           {}
     - error:          {"message": "..."}
     """
-    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    active_model = model or await get_preferred_model()
+    client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
     tools = await get_tools_for_claude()
     # Walk the tail to find the most recent user *text* — tool_result rows
     # also carry role="user" but their content is structured blocks, not the
@@ -80,6 +83,15 @@ async def run_agent_stream(
 
     max_result_chars = settings.agent_tool_result_max_chars
     thinking_param = _build_thinking_param()
+
+    async def _run_tool(tu: dict) -> tuple[dict, str, bool]:
+        """Execute one tool call in parallel; return (tu, result_text, is_error)."""
+        try:
+            inp = json.loads(tu["input_json"]) if tu["input_json"] else {}
+        except json.JSONDecodeError:
+            inp = {}
+        text, is_error = await execute_tool(tu["name"], inp)
+        return tu, _truncate_tool_result(text, max_result_chars), is_error
 
     claude_messages, dropped = _compact_history(
         [{"role": m["role"], "content": m["content"]} for m in messages],
@@ -100,7 +112,7 @@ async def run_agent_stream(
     # request shape — within a bounded factor of the first count — and the
     # endpoint round-trip isn't free of latency.
     est_tokens = await estimate_request_tokens(
-        client, settings.agent_model, system_blocks, claude_messages, tools,
+        client, active_model, system_blocks, claude_messages, tools,
     )
     if est_tokens is not None:
         logger.info("Pre-send input tokens: %d", est_tokens)
@@ -109,6 +121,8 @@ async def run_agent_stream(
                 "Input tokens %d exceed soft budget %d — context may be unhealthy",
                 est_tokens, settings.agent_max_input_tokens,
             )
+
+    accumulated_result_chars = 0  # tracks tool result chars added after initial estimate
 
     for iteration in range(MAX_ITERATIONS):
         logger.info("Agent iteration %d", iteration + 1)
@@ -121,7 +135,7 @@ async def run_agent_stream(
         usage = {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0}
 
         stream_kwargs: dict = {
-            "model": settings.agent_model,
+            "model": active_model,
             "max_tokens": settings.agent_max_tokens,
             "system": system_blocks,
             "messages": claude_messages,
@@ -192,10 +206,8 @@ async def run_agent_stream(
                         })
                     elif event.delta.type == "thinking_delta":
                         block["thinking"] += event.delta.thinking
-                        yield sse_event(EVENT_THINKING_DELTA, {
-                            "step_id": block["step_id"],
-                            "text": event.delta.thinking,
-                        })
+                        # Content stays server-side — only the indicator events
+                        # (thinking_start / thinking_stop) reach the frontend.
                     elif event.delta.type == "signature_delta":
                         # Signature must be preserved for extended thinking verification
                         block["signature"] += event.delta.signature
@@ -280,30 +292,57 @@ async def run_agent_stream(
 
         claude_messages.append({"role": "assistant", "content": assistant_content})
 
-        # Execute all tool calls and feed results back
+        # Execute all tool calls in parallel — Claude emits them as a batch,
+        # and they're independent DB reads so there's no reason to serialize.
+        tool_outputs: list[tuple[dict, str, bool]] = await asyncio.gather(
+            *[_run_tool(tu) for tu in tool_uses]
+        )
+
         tool_results = []
-        for tu in tool_uses:
-            try:
-                inp = json.loads(tu["input_json"]) if tu["input_json"] else {}
-            except json.JSONDecodeError:
-                inp = {}
-
-            result_text = await execute_tool(tu["name"], inp)
-            result_text = _truncate_tool_result(result_text, max_result_chars)
-
-            tool_results.append({
+        for tu, result_text, is_error in tool_outputs:
+            entry: dict = {
                 "type": "tool_result",
                 "tool_use_id": tu["id"],
                 "content": result_text,
-            })
+            }
+            if is_error:
+                entry["is_error"] = True
+            tool_results.append(entry)
 
             yield sse_event(EVENT_TOOL_DONE, {
                 "step_id": tu["step_id"],
                 "id": tu["id"],
-                "result": result_text[:500],  # truncate for SSE
+                "result": result_text,
+                "is_error": is_error,
             })
+
+        # Mid-loop token budget check — rough estimate (4 chars ≈ 1 token).
+        # The initial estimate only covers the pre-send shape; tool results
+        # added across iterations can push us well past the soft budget.
+        accumulated_result_chars += sum(len(r) for _, r, _ in tool_outputs)
+        if est_tokens is not None:
+            mid_est = est_tokens + accumulated_result_chars // 4
+            if mid_est > settings.agent_max_input_tokens:
+                logger.warning(
+                    "Mid-loop token estimate ~%d exceeds budget %d (iter=%d)",
+                    mid_est, settings.agent_max_input_tokens, iteration + 1,
+                )
 
         claude_messages.append({"role": "user", "content": tool_results})
         yield sse_event(EVENT_PERSIST_TOOL_RESULTS, {"blocks": tool_results})
+
+    else:
+        # MAX_ITERATIONS exhausted — agent was still in tool-calling mode.
+        logger.warning("Agent hit MAX_ITERATIONS (%d) without finishing", MAX_ITERATIONS)
+        fallback = (
+            "Tôi đã thực hiện nhiều bước nhưng chưa hoàn thành được yêu cầu. "
+            "Vui lòng thử câu hỏi cụ thể hơn hoặc chia nhỏ yêu cầu."
+        )
+        yield sse_event(EVENT_TEXT_START, {"step_id": "fallback"})
+        yield sse_event(EVENT_TEXT_DELTA, {"step_id": "fallback", "text": fallback})
+        yield sse_event(EVENT_TEXT_STOP, {"step_id": "fallback", "final": True})
+        yield sse_event(EVENT_PERSIST_ASSISTANT, {
+            "blocks": [{"type": "text", "text": fallback}]
+        })
 
     yield sse_event(EVENT_DONE, {})

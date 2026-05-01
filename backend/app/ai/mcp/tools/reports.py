@@ -202,3 +202,25 @@ def register(mcp: FastMCP) -> None:
                     f"- [{r.next_run_date}] {r.description}: {r.amount:,.0f} VND ({t}) | {f} | {cat}"
                 )
             return "\n".join(lines)
+
+    @mcp.tool()
+    async def get_monthly_digest() -> str:
+        """Return the latest AI-generated monthly financial digest.
+
+        The digest contains an overall financial summary, budget status, goal
+        progress, investment overview, and 3 recommended actions.
+
+        NOTE: Returns CACHED data from the last generation — may be days or weeks
+        old. Use live tools (get_financial_summary, get_budget_status, get_goals)
+        for current numbers. Call this only when the user explicitly asks for the
+        monthly report, a general overview, or what actions to take this month.
+        """
+        from app.ai.digest import get_latest_digest  # lazy — avoids circular import
+        digest = await get_latest_digest()
+        if not digest:
+            return "Chưa có báo cáo tháng nào. Hãy tạo báo cáo tháng trong phần Cài đặt → Báo cáo tháng."
+        return (
+            f"[Báo cáo tháng {digest.generated_for_month} — "
+            f"tạo lúc {digest.created_at.strftime('%d/%m/%Y %H:%M')}]\n\n"
+            + digest.content
+        )

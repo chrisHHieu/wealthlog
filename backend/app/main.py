@@ -1,9 +1,11 @@
+import asyncio
 from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.ai.memory.decay import decay_old_facts, purge_expired_facts
 from app.config import settings
 from app.database import async_session
 from app.logging_config import get_logger, setup_logging
@@ -14,9 +16,11 @@ from app.routers import (
     categories,
     chat,
     dashboard,
+    digest,
     goals,
     investments,
     memory,
+    onboard,
     recurring,
     reports,
     settings as settings_router,
@@ -44,6 +48,20 @@ def _run_migrations() -> None:
         logger.info("Alembic: %s", line)
 
 
+async def _fact_decay_loop() -> None:
+    """Run importance decay and expired-fact purge once per day."""
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        try:
+            await decay_old_facts()
+        except Exception:
+            logger.exception("Scheduled fact decay failed")
+        try:
+            await purge_expired_facts()
+        except Exception:
+            logger.exception("Scheduled fact purge failed")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Startup and shutdown events."""
@@ -58,6 +76,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     async with async_session() as session:
         await seed(session)
         await session.commit()
+
+    asyncio.create_task(_fact_decay_loop())
 
     yield
     logger.info("Shutting down %s", settings.app_name)
@@ -94,6 +114,8 @@ app.include_router(dashboard.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
 app.include_router(memory.router)
+app.include_router(onboard.router)
+app.include_router(digest.router)
 
 
 @app.get("/health")

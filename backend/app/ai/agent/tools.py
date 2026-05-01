@@ -22,8 +22,12 @@ async def get_tools_for_claude() -> list[dict]:
     ]
 
 
-async def execute_tool(name: str, arguments: dict) -> str:
-    """Execute an MCP tool and return the text result."""
+async def execute_tool(name: str, arguments: dict) -> tuple[str, bool]:
+    """Execute an MCP tool; return (text, is_error).
+
+    is_error=True signals the Claude API that the result is an error, allowing
+    the model to decide whether to retry or surface it to the user.
+    """
     try:
         result = await mcp.call_tool(name, arguments)
         # call_tool returns (list[TextContent], dict) or similar
@@ -39,7 +43,7 @@ async def execute_tool(name: str, arguments: dict) -> str:
         elif isinstance(contents, str):
             texts.append(contents)
 
-        return "\n".join(texts) if texts else "No results."
+        return "\n".join(texts) if texts else "No results.", False
     except Exception as e:
         logger.exception("Tool execution error: %s", name)
-        return f"Error calling tool {name}: {e}"
+        return f"Tool error ({name}): {e}", True

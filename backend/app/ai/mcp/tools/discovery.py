@@ -14,6 +14,17 @@ _BLOCKED_KEYWORDS = {
     "COPY", "VACUUM", "REINDEX",
 }
 
+# Internal / AI-state tables — never expose via query_database.
+# Financial tables (transactions, accounts, budgets, goals, investments…) are allowed.
+_BLOCKED_TABLES = {
+    "ALEMBIC_VERSION",
+    "SETTINGS",
+    "CHAT_SESSIONS", "CHAT_MESSAGES",
+    "SESSION_SUMMARIES",
+    "USER_FACTS", "USER_COMMITMENTS", "USER_MODELS",
+    "WEEKLY_DIGESTS",
+}
+
 # Column-name patterns whose values are safe to expose as samples
 # (non-sensitive lookup-style columns). UUID / timestamp / numeric types
 # are excluded by the data_type check in _should_sample.
@@ -56,7 +67,10 @@ def _is_read_only(sql: str) -> bool:
     # Set intersection over whole tokens — `CREATE` matches `CREATE`, never
     # `CREATED_AT`. Statement-chaining attacks ("SELECT 1; DROP TABLE x") still
     # get caught because the second statement's keywords tokenize separately.
-    return not (tokens & _BLOCKED_KEYWORDS)
+    if tokens & _BLOCKED_KEYWORDS:
+        return False
+    # Block queries that reference internal/AI-state tables.
+    return not (tokens & _BLOCKED_TABLES)
 
 
 async def build_schema_summary() -> str:
@@ -166,14 +180,6 @@ def _hint_for_sql_error(err: str) -> str | None:
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
-    async def get_database_schema() -> str:
-        """Return database structure (tables, columns, enum values, FKs, samples).
-        Note: schema is already injected into the system prompt under
-        <database_schema>. Only call this tool to re-fetch the latest schema
-        (e.g., after a migration)."""
-        return await build_schema_summary()
-
-    @mcp.tool()
     async def query_database(sql: str) -> str:
         """Run a read-only SELECT on PostgreSQL 16 (default LIMIT 20 rows).
         Use when the specialized tools can't answer the question.
@@ -184,6 +190,11 @@ def register(mcp: FastMCP) -> None:
         - ROUND(double, int) does NOT exist → cast: ROUND(expr::numeric, 2).
         - Avoid format/round in SQL; return raw numbers and format in the reply."""
         if not _is_read_only(sql):
+            normalized_check = _strip_comments(sql).strip().upper()
+            tokens_check = set(_WORD_RE.findall(normalized_check))
+            if tokens_check & _BLOCKED_TABLES:
+                blocked = tokens_check & _BLOCKED_TABLES
+                return f"Error: querying internal tables is not allowed ({', '.join(sorted(blocked)).lower()})."
             return "Error: only SELECT (read-only) statements are allowed."
 
         normalized = sql.strip().rstrip(";")

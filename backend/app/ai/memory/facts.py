@@ -9,7 +9,14 @@ import anthropic
 from sqlalchemy import func, nulls_last, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.memory.prompts import CONSOLIDATION_PROMPT, REVIEW_PROMPT
+from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+
+from app.ai.memory.prompts import (
+    CANONICAL_TOPICS,
+    CATEGORY_DEFAULT_TOPICS,
+    CONSOLIDATION_PROMPT,
+    REVIEW_PROMPT,
+)
 from app.config import settings
 from app.database import get_session
 from app.logging_config import get_logger
@@ -83,6 +90,7 @@ async def get_user_facts(limit: int = 20, track_access: bool = True) -> list[dic
                 "category": r.category,
                 "importance": r.importance,
                 "verified_by_user": r.verified_by_user,
+                "topics": r.topics or [],
             }
             for r in rows
         ]
@@ -114,6 +122,8 @@ async def save_user_fact(
     expires_at: datetime | None = None,
     importance: int = 5,
     confidence: int = 5,
+    verified_by_user: bool = False,
+    topics: list[str] | None = None,
 ) -> dict:
     """Save a new user fact, deduplicating against existing facts.
 
@@ -138,6 +148,8 @@ async def save_user_fact(
             expires_at=expires_at,
             importance=importance,
             confidence=confidence,
+            verified_by_user=verified_by_user,
+            topics=topics or [],
         )
         db.add(new_fact)
         return {"status": "saved", "fact": fact, "category": category}
@@ -150,6 +162,7 @@ async def update_user_fact(
     importance: int,
     expires_at: datetime | None,
     confidence: int | None = None,
+    topics: list[str] | None = None,
 ) -> bool:
     """Replace an existing fact in-place.
 
@@ -174,6 +187,8 @@ async def update_user_fact(
         row.expires_at = expires_at
         if confidence is not None:
             row.confidence = confidence
+        if topics is not None:
+            row.topics = topics
         return True
 
 
@@ -190,33 +205,70 @@ async def delete_user_fact(fact_id: uuid.UUID) -> bool:
         return False
 
 
-async def build_facts_prompt() -> str:
+_CATEGORY_LABELS = {
+    "preference":  "Preference",
+    "habit":       "Habit",
+    "goal":        "Goal",
+    "context":     "Context",
+    "pattern":     "Pattern",
+    "commitment":  "Commitment",
+    "emotion":     "Emotion",
+    "general":     "General",
+}
+
+
+def _topic_overlap(fact_topics: list[str], query_topics: list[str]) -> int:
+    """Count token-level overlap between stored fact topics and query topic tokens.
+
+    Both sides are lowercased and split on whitespace so multi-word tags like
+    'thu nhập' match query tokens ['thu', 'nhập'] extracted from a Vietnamese
+    user message.
+    """
+    if not fact_topics or not query_topics:
+        return 0
+    fact_tokens: set[str] = set()
+    for t in fact_topics:
+        fact_tokens.update(t.lower().split())
+    query_tokens = {t.lower() for t in query_topics}
+    return len(fact_tokens & query_tokens)
+
+
+async def build_facts_prompt(
+    limit: int = 20,
+    query_topics: list[str] | None = None,
+) -> str:
     """Build a text block of user facts for system prompt injection.
 
-    Verified facts (user confirmed via the memory tools) get a leading [✓]
-    marker so the agent can lean on them more confidently than reviewer
-    guesses — important for finance, where citing an unverified goal as if it
-    were stated would be misleading. ``confidence`` itself is intentionally
-    NOT leaked: it's internal ranking signal, not a hint we want the agent
-    to second-guess in its replies.
+    ``limit`` controls the injection budget. When ``query_topics`` is provided
+    (tokens extracted from the latest user message), facts whose stored topics
+    overlap with the query are boosted in the ranking — associative retrieval
+    without embeddings. The boost is applied in Python after fetching a wider
+    pool, so no extra DB round-trip is needed.
+
+    Verified facts get a leading [✓] marker. Topic tags are shown as #tag so
+    the agent can reason about what each fact relates to.
     """
-    facts = await get_user_facts()
+    if query_topics:
+        # Fetch wider pool, rerank with topic boost, then trim to limit.
+        pool = await get_user_facts(limit=min(limit * 3, 120), track_access=False)
+        if pool:
+            def _score(f: dict) -> int:
+                base = f["importance"] * 10 + (5 if f.get("verified_by_user") else 0)
+                return base + _topic_overlap(f.get("topics", []), query_topics) * 20
+            pool.sort(key=_score, reverse=True)
+        facts = pool[:limit]
+    else:
+        facts = await get_user_facts(limit=limit)
+
     if not facts:
         return ""
 
-    category_labels = {
-        "preference": "Preference",
-        "habit": "Habit",
-        "goal": "Goal",
-        "context": "Context",
-        "general": "General",
-    }
-
     lines = ["[Known facts about the user]"]
     for f in facts:
-        label = category_labels.get(f["category"], f["category"])
+        label = _CATEGORY_LABELS.get(f["category"], f["category"])
         marker = "[✓] " if f.get("verified_by_user") else ""
-        lines.append(f"- {marker}({label}) {f['fact']}")
+        topics_str = (" " + " ".join(f"#{t}" for t in f["topics"])) if f.get("topics") else ""
+        lines.append(f"- {marker}({label}) {f['fact']}{topics_str}")
     lines.append("[End of user facts]")
 
     return "\n".join(lines)
@@ -225,7 +277,16 @@ async def build_facts_prompt() -> str:
 # ── Background Review Agent ──────────────────────────────────────────────────
 
 
-_VALID_CATEGORIES = ("preference", "habit", "goal", "context", "general")
+_VALID_CATEGORIES = (
+    "preference",   # how the user likes things done
+    "habit",        # what they regularly do or avoid
+    "goal",         # what they are saving or working toward
+    "context",      # life situation, role, household
+    "pattern",      # behavioral trend observed across multiple sessions
+    "commitment",   # something the user explicitly said they will do
+    "emotion",      # avoidance signal or emotional pattern
+    "general",
+)
 _DEFAULT_SCORE = 5
 
 
@@ -251,6 +312,58 @@ def _clamp_score(raw: object) -> int:
 # names to the one validator so they can never drift apart.
 _clamp_importance = _clamp_score
 _clamp_confidence = _clamp_score
+
+# Maps common free-form tags Haiku might emit (despite instructions) to canonical.
+_TOPIC_ALIASES: dict[str, str] = {
+    "lương": "thu nhập", "salary": "thu nhập", "income": "thu nhập", "bonus": "thu nhập",
+    "expenses": "chi tiêu", "spending": "chi tiêu", "expense": "chi tiêu", "tiêu": "chi tiêu",
+    "budget": "ngân sách",
+    "savings": "tiết kiệm", "save": "tiết kiệm",
+    "goal": "mục tiêu", "target": "mục tiêu",
+    "investment": "đầu tư", "invest": "đầu tư", "stock": "đầu tư", "crypto": "đầu tư",
+    "debt": "nợ", "loan": "nợ", "credit": "nợ",
+    "account": "tài khoản",
+    "plan": "kế hoạch", "planning": "kế hoạch", "strategy": "kế hoạch",
+    "subscription": "định kỳ", "recurring": "định kỳ",
+    "food": "ăn uống", "dining": "ăn uống",
+    "transport": "di chuyển", "vehicle": "di chuyển", "fuel": "di chuyển", "xe": "di chuyển",
+    "housing": "nhà ở", "rent": "nhà ở", "nhà": "nhà ở",
+    "shopping": "mua sắm", "clothes": "mua sắm",
+    "health": "sức khỏe", "insurance": "sức khỏe", "medical": "sức khỏe",
+    "entertainment": "giải trí", "leisure": "giải trí", "hobby": "giải trí",
+    "education": "giáo dục", "course": "giáo dục", "books": "giáo dục",
+    "family": "gia đình", "spouse": "gia đình", "children": "gia đình",
+    "work": "công việc", "career": "công việc", "business": "công việc",
+    "travel": "du lịch", "vacation": "du lịch",
+    "habit": "thói quen", "routine": "thói quen", "pattern": "thói quen",
+    "emotion": "cảm xúc", "feeling": "cảm xúc", "avoidance": "cảm xúc",
+}
+
+_CANONICAL_SET: frozenset[str] = frozenset(CANONICAL_TOPICS)
+
+
+def _normalize_topics(raw: object, category: str) -> list[str]:
+    """Map raw Haiku-emitted tags to canonical vocabulary.
+
+    1. Accept tags already in the canonical set.
+    2. Map known aliases (e.g. 'lương' → 'thu nhập').
+    3. Drop anything unrecognized.
+    4. Fall back to category default when nothing survives.
+    """
+    items = raw if isinstance(raw, list) else []
+    result: list[str] = []
+    seen: set[str] = set()
+    for t in items:
+        if not isinstance(t, str):
+            continue
+        normalized = t.lower().strip()
+        canonical = normalized if normalized in _CANONICAL_SET else _TOPIC_ALIASES.get(normalized)
+        if canonical and canonical not in seen:
+            seen.add(canonical)
+            result.append(canonical)
+    if not result:
+        result = list(CATEGORY_DEFAULT_TOPICS.get(category, []))
+    return result[:3]
 
 
 def _compute_expiry(item: dict, category: str) -> datetime | None:
@@ -292,6 +405,33 @@ async def maybe_trigger_review(
         turn_count = result.scalar_one()
 
     if turn_count == 0 or turn_count % settings.agent_review_cadence != 0:
+        return
+
+    asyncio.create_task(_run_review(session_id, messages))
+
+
+async def ensure_review_on_session_end(
+    session_id: uuid.UUID,
+    messages: list[dict],
+) -> None:
+    """Guarantee at least one fact-extraction pass when a session is closed/summarized.
+
+    Short sessions (< cadence turns) never hit the cadence trigger, so facts
+    from them would only be captured via the lossy summary→synthesis path.
+    This fires a one-shot review for sessions that haven't had one yet.
+    """
+    async with get_session() as db:
+        result = await db.execute(
+            select(func.count(ChatMessage.id)).where(
+                ChatMessage.session_id == session_id,
+                ChatMessage.role == "user",
+                ChatMessage.content != "",
+            )
+        )
+        turn_count = result.scalar_one()
+
+    # If the cadence review already fired at least once, nothing to do.
+    if turn_count == 0 or turn_count >= settings.agent_review_cadence:
         return
 
     asyncio.create_task(_run_review(session_id, messages))
@@ -351,6 +491,7 @@ async def _apply_review_item(
     importance = _clamp_importance(item.get("importance"))
     confidence = _clamp_confidence(item.get("confidence"))
     expires_at = _compute_expiry(item, category)
+    topics = _normalize_topics(item.get("topics"), category)
 
     if item.get("action") == "replace":
         idx = item.get("replaces")
@@ -363,6 +504,7 @@ async def _apply_review_item(
                 importance=importance,
                 expires_at=expires_at,
                 confidence=confidence,
+                topics=topics or None,
             )
             return "updated" if ok else "skipped"
         # Invalid replaces index → fall through to add so the insight isn't lost
@@ -374,6 +516,7 @@ async def _apply_review_item(
         expires_at=expires_at,
         importance=importance,
         confidence=confidence,
+        topics=topics or None,
     )
     return result["status"]  # 'saved' or 'duplicate'
 
@@ -414,9 +557,10 @@ async def _run_review(
         else:
             review_messages.append({"role": "user", "content": REVIEW_PROMPT})
 
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        active_model = await get_preferred_model()
+        client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
-            model=settings.agent_review_model,
+            model=active_model,
             max_tokens=1024,
             temperature=0.3,
             messages=review_messages,
@@ -494,9 +638,10 @@ async def _maybe_consolidate(session_id: uuid.UUID) -> None:
     )
 
     try:
-        client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+        active_model = await get_preferred_model()
+        client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
-            model=settings.agent_review_model,
+            model=active_model,
             max_tokens=1024,
             temperature=0.3,
             messages=[{
@@ -567,6 +712,7 @@ async def _apply_merge_item(
         category = "general"
     importance = _clamp_importance(item.get("importance"))
     confidence = _clamp_confidence(item.get("confidence"))
+    topics = _normalize_topics(item.get("topics"), category)
 
     survivor_id = existing[keeps - 1][0]
     ok = await update_user_fact(
@@ -576,6 +722,7 @@ async def _apply_merge_item(
         importance=importance,
         expires_at=None,
         confidence=confidence,
+        topics=topics or None,
     )
     if not ok:
         return 0, 0
