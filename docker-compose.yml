@@ -27,15 +27,21 @@ services:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wealthlog}:${POSTGRES_PASSWORD:-wealthlog2026}@db:5432/${POSTGRES_DB:-wealthlog}
       CORS_ORIGINS: '["http://localhost:3001","http://frontend:3001"]'
       DEBUG: ${DEBUG:-false}
+      # ── AI Provider ───────────────────────────────────────────────────────
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
-      AGENT_MODEL: ${AGENT_MODEL:-claude-haiku-4-5-20251001}
-      AGENT_MAX_TOKENS: ${AGENT_MAX_TOKENS:-4096}
-      AGENT_TOOL_RESULT_MAX_CHARS: ${AGENT_TOOL_RESULT_MAX_CHARS:-3000}
-      AGENT_MAX_HISTORY_TOKENS: ${AGENT_MAX_HISTORY_TOKENS:-16000}
-      AGENT_REVIEW_MODEL: ${AGENT_REVIEW_MODEL:-claude-haiku-4-5-20251001}
-      AGENT_REVIEW_CADENCE: ${AGENT_REVIEW_CADENCE:-6}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      # ── Agent model ───────────────────────────────────────────────────────
+      AGENT_MODEL: ${AGENT_MODEL:-claude-sonnet-4-6}
+      AGENT_MAX_TOKENS: ${AGENT_MAX_TOKENS:-8000}
       AGENT_THINKING_ENABLED: ${AGENT_THINKING_ENABLED:-true}
-      AGENT_THINKING_BUDGET: ${AGENT_THINKING_BUDGET:-2000}
+      AGENT_THINKING_BUDGET: ${AGENT_THINKING_BUDGET:-8000}
+      # ── Background models ─────────────────────────────────────────────────
+      AGENT_REVIEW_MODEL: ${AGENT_REVIEW_MODEL:-claude-haiku-4-5-20251001}
+      SESSION_SUMMARY_MODEL: ${SESSION_SUMMARY_MODEL:-claude-haiku-4-5-20251001}
+      USER_MODEL_SYNTHESIS_MODEL: ${USER_MODEL_SYNTHESIS_MODEL:-claude-sonnet-4-6}
+      # ── Context window ────────────────────────────────────────────────────
+      AGENT_TOOL_RESULT_MAX_CHARS: ${AGENT_TOOL_RESULT_MAX_CHARS:-3000}
+      AGENT_REVIEW_CADENCE: ${AGENT_REVIEW_CADENCE:-6}
       MCP_HOST: ${MCP_HOST:-0.0.0.0}
       MCP_PORT: ${MCP_PORT:-8002}
     ports:
