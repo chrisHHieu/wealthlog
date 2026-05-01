@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -39,6 +39,9 @@ class UserFact(Base, UUIDMixin):
     # a low-confidence guess can still be high-importance ("user might be
     # saving for a house"). Internal-only — not surfaced in the prompt block.
     confidence: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
+    # 1-5 short tags in the same language as the fact (e.g., ["thu nhập", "lương"]).
+    # Used for topic-based retrieval boost in build_facts_prompt().
+    topics: Mapped[list | None] = mapped_column(JSON, nullable=True)
     # Usage stats — let frequently-surfaced facts bubble up among equals.
     access_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_accessed_at: Mapped[datetime | None] = mapped_column(

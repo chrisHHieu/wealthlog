@@ -10,7 +10,10 @@ from app.models.recurring import Frequency, RecurringTransaction
 from app.models.session_summary import SessionSummary
 from app.models.setting import Setting
 from app.models.transaction import Transaction, TransactionType
+from app.models.user_commitment import UserCommitment
 from app.models.user_fact import UserFact
+from app.models.user_model import UserModel
+from app.models.weekly_digest import WeeklyDigest
 
 __all__ = [
     "Account",
@@ -32,5 +35,8 @@ __all__ = [
     "Setting",
     "Transaction",
     "TransactionType",
+    "UserCommitment",
     "UserFact",
+    "UserModel",
+    "WeeklyDigest",
 ]

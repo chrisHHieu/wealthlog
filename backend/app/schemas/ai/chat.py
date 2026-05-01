@@ -19,6 +19,7 @@ class ChatMessageInput(BaseModel):
 class ChatRequest(CamelModel):
     session_id: uuid.UUID | None = None
     messages: list[ChatMessageInput]
+    model: str | None = None
 
 
 class SessionCreate(CamelModel):

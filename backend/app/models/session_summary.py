@@ -32,6 +32,13 @@ class SessionSummary(Base, UUIDMixin, TimestampMixin):
     # instead of paying for the full summary every turn. Nullable: legacy rows
     # written before this column existed simply won't have one.
     outcome: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Things the user explicitly said they would do (extracted by summarizer).
+    # Nullable for backward compatibility with rows written before this column.
+    commitments: Mapped[list | None] = mapped_column(_JSONField, nullable=True)
+    # What the user pushed back on or avoided — context for sensitive topics.
+    pushback: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Unresolved questions the agent should pick up in future sessions.
+    open_questions: Mapped[list | None] = mapped_column(_JSONField, nullable=True)
 
     __table_args__ = (
         UniqueConstraint("session_id", name="uq_session_summaries_session_id"),
