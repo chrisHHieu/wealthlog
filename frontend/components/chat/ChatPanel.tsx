@@ -1,13 +1,13 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, Trash2, X, BarChart3, Wallet, TrendingUp, Target, Plus, MessageSquare, ChevronLeft } from 'lucide-react'
+import { Sparkles, Trash2, X, BarChart3, Wallet, TrendingUp, Target, Plus, MessageSquare, ChevronLeft, ChevronDown, Cpu } from 'lucide-react'
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { useAppStore } from '@/store/useAppStore'
 import { API_URL } from '@/lib/api'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
-import type { ChatMessage as ChatMessageType, ChatSession, ChatStep } from '@/types/chat'
+import type { ChatMessage as ChatMessageType, ChatSession, ChatStep, ModelOption } from '@/types/chat'
 
 type PersistedBlock = {
   type?: string
@@ -136,7 +136,7 @@ const SUGGESTIONS = [
   { icon: Target,    label: 'Tiến độ mục tiêu tiết kiệm',    color: 'gold'   },
 ] as const
 
-function useChat() {
+function useChat(model: string | null) {
   const [messages, setMessages] = useState<ChatMessageType[]>([])
   const [isStreaming, setIsStreaming] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -189,6 +189,7 @@ function useChat() {
         body: JSON.stringify({
           sessionId: sessionId,
           messages: history,
+          ...(model ? { model } : {}),
         }),
         signal: abort.signal,
       })
@@ -312,7 +313,7 @@ function useChat() {
                 m.id === aiId
                   ? { ...m, steps: (m.steps || []).map(s =>
                       s.kind === 'tool' && s.id === data.id
-                        ? { ...s, status: 'done' as const, result: data.result }
+                        ? { ...s, status: data.is_error ? 'error' as const : 'done' as const, result: data.result }
                         : s
                     ) }
                   : m
@@ -398,12 +399,41 @@ function useSessions(currentSessionId: string | null) {
   return { sessions, loading, fetchSessions, deleteSession }
 }
 
+function useModel() {
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [selectedModel, setSelectedModel] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/chat/models`)
+      .then(r => r.json())
+      .then(data => {
+        setModels(data.models ?? [])
+        setSelectedModel(data.default ?? null)
+      })
+      .catch(() => {})
+  }, [])
+
+  const selectModel = useCallback((modelId: string) => {
+    setSelectedModel(modelId)
+    // Persist to backend so all AI features use this model
+    fetch(`${API_URL}/api/chat/models/preferred`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: modelId }),
+    }).catch(() => {})
+  }, [])
+
+  return { models, selectedModel, selectModel }
+}
+
 export function ChatPanel() {
   const { chatOpen, closeChat } = useAppStore()
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { messages, isStreaming, sessionId, sendMessage, newSession, loadSession } = useChat()
+  const { models, selectedModel, selectModel } = useModel()
+  const { messages, isStreaming, sessionId, sendMessage, newSession, loadSession } = useChat(selectedModel)
   const { sessions, deleteSession } = useSessions(sessionId)
   const [showHistory, setShowHistory] = useState(false)
+  const [showModelPicker, setShowModelPicker] = useState(false)
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -413,6 +443,16 @@ export function ChatPanel() {
     loadSession(id)
     setShowHistory(false)
   }
+
+  useEffect(() => {
+    if (!showModelPicker) return
+    const close = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('.chat-model-picker')) setShowModelPicker(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showModelPicker])
 
   return (
     <AnimatePresence>
@@ -437,6 +477,40 @@ export function ChatPanel() {
                 </div>
               )}
               <h3>{showHistory ? 'Lịch sử' : 'WealthLog AI'}</h3>
+              {!showHistory && models.length > 0 && (
+                <div className="chat-model-picker">
+                  <button
+                    className="chat-model-btn"
+                    onClick={() => setShowModelPicker(v => !v)}
+                  >
+                    <Cpu size={11} />
+                    <span>{models.find(m => m.id === selectedModel)?.name ?? selectedModel}</span>
+                    <ChevronDown size={11} />
+                  </button>
+                  <AnimatePresence>
+                    {showModelPicker && (
+                      <motion.div
+                        className="chat-model-dropdown"
+                        initial={{ opacity: 0, y: -6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.15 }}
+                      >
+                        {models.map(m => (
+                          <button
+                            key={m.id}
+                            className={`chat-model-option${m.id === selectedModel ? ' active' : ''}`}
+                            onClick={() => { selectModel(m.id); setShowModelPicker(false) }}
+                          >
+                            <span className="chat-model-option-name">{m.name}</span>
+                            <span className="chat-model-option-desc">{m.description}</span>
+                          </button>
+                        ))}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
             </div>
             <div className="chat-header-actions">
               {!showHistory && (

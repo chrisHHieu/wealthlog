@@ -19,7 +19,7 @@ export type ChatStep =
       name: string
       input?: Record<string, unknown>
       result?: string
-      status: 'running' | 'done'
+      status: 'running' | 'done' | 'error'
     }
 
 export interface ChatMessage {
@@ -29,6 +29,12 @@ export interface ChatMessage {
   timestamp: Date
   steps?: ChatStep[]
   isStreaming?: boolean
+}
+
+export interface ModelOption {
+  id: string
+  name: string
+  description: string
 }
 
 export interface ChatSession {

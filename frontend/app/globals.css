@@ -1444,7 +1444,6 @@ select.input option {
   z-index: var(--z-fab);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
 }
 
 [data-theme="light"] .chat-panel {
@@ -1509,6 +1508,88 @@ select.input option {
 .chat-header-btn:hover {
   background: var(--surface-hover);
   color: var(--text-primary);
+}
+
+/* ─── Model Picker ───────────────────────────────────────────────────────────── */
+.chat-model-picker {
+  position: relative;
+}
+
+.chat-model-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  border: 1px solid var(--surface-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all var(--duration-fast);
+  white-space: nowrap;
+}
+
+.chat-model-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--surface-border-hover);
+  color: var(--text-primary);
+}
+
+.chat-model-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--elevation-3);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  z-index: 100;
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.chat-model-option {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: none;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background var(--duration-fast);
+}
+
+.chat-model-option:hover {
+  background: var(--surface-hover);
+}
+
+.chat-model-option.active {
+  background: var(--accent-purple-subtle);
+}
+
+.chat-model-option-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.chat-model-option.active .chat-model-option-name {
+  color: var(--accent-purple);
+}
+
+.chat-model-option-desc {
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 /* ─── Messages Area ──────────────────────────────────────────────────────────── */
@@ -1808,6 +1889,12 @@ select.input option {
   background: rgba(34, 197, 94, 0.12);
   border-color: rgba(34, 197, 94, 0.35);
   color: var(--accent-green);
+}
+
+.chat-step-dot-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.35);
+  color: #ef4444;
 }
 
 .chat-step-spin {

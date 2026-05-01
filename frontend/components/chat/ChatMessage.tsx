@@ -1,12 +1,48 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { Sparkles, ChevronDown, ChevronRight, Check, Loader2, Brain, Wrench, Eye, MessageSquare } from 'lucide-react'
+import { Sparkles, ChevronDown, ChevronRight, Check, Loader2, Brain, Wrench, Eye, MessageSquare, AlertCircle } from 'lucide-react'
 import { useState } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
 import type { ChatMessage as ChatMessageType, ChatStep } from '@/types/chat'
+
+const TOOL_LABELS: Record<string, string> = {
+  // Reports
+  get_financial_summary:        'Xem tổng quan tài chính',
+  get_spending_trends:          'Phân tích xu hướng chi tiêu',
+  get_top_expenses:             'Xem chi tiêu lớn nhất',
+  get_upcoming_bills:           'Kiểm tra hóa đơn sắp tới',
+  get_monthly_digest:           'Đọc báo cáo tháng',
+  // Transactions
+  search_transactions:          'Tìm kiếm giao dịch',
+  get_spending_by_category:     'Xem chi tiêu theo danh mục',
+  get_income_by_category:       'Xem thu nhập theo danh mục',
+  create_transaction:           'Tạo giao dịch',
+  create_multiple_transactions: 'Tạo nhiều giao dịch',
+  update_transaction:           'Cập nhật giao dịch',
+  delete_transaction:           'Xóa giao dịch',
+  // Accounts
+  get_accounts:                 'Xem danh sách tài khoản',
+  get_account_summary:          'Xem tổng quan tài khoản',
+  // Budgets
+  get_budget_status:            'Kiểm tra ngân sách',
+  // Goals
+  get_goals:                    'Xem mục tiêu tiết kiệm',
+  // Investments
+  get_portfolio:                'Xem danh mục đầu tư',
+  // Memory
+  list_my_facts:                'Xem thông tin đã ghi nhớ',
+  forget_fact:                  'Xóa thông tin đã ghi nhớ',
+  edit_fact:                    'Cập nhật thông tin đã ghi nhớ',
+  verify_fact:                  'Xác nhận thông tin đã ghi nhớ',
+  list_commitments:             'Xem cam kết',
+  complete_commitment:          'Đánh dấu cam kết hoàn thành',
+  dismiss_commitment:           'Bỏ qua cam kết',
+  // Analytics
+  query_database:               'Phân tích dữ liệu',
+}
 
 interface Props {
   message: ChatMessageType
@@ -106,25 +142,11 @@ function TimelineStep({ step }: { step: ChatStep }) {
           </div>
         </div>
         <div className="chat-step-body">
-          <button className="chat-step-header" onClick={() => setExpanded(!expanded)}>
-            {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+          <div className="chat-step-header">
             <span className="chat-step-label">
               {step.streaming ? 'Đang suy nghĩ...' : 'Suy nghĩ sâu'}
             </span>
-          </button>
-          <AnimatePresence initial={false}>
-            {expanded && (
-              <motion.div
-                className="chat-step-content chat-step-thinking-content"
-                initial={{ height: 0, opacity: 0 }}
-                animate={{ height: 'auto', opacity: 1 }}
-                exit={{ height: 0, opacity: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                <div className="chat-step-text">{step.content}</div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </div>
         </div>
       </div>
     )
@@ -152,20 +174,22 @@ function TimelineStep({ step }: { step: ChatStep }) {
 
   // Tool step
   const hasResult = step.status === 'done' && !!step.result
-  const hasInput = !!step.input && Object.keys(step.input).length > 0
-  const canExpand = hasResult || hasInput
-  const inputPreview = step.input ? formatToolInputPreview(step.input) : null
-  const fullInput = step.input ? formatToolInputFull(step.input) : null
+  const label = TOOL_LABELS[step.name] ?? step.name
+  const isError = step.status === 'error'
 
   return (
     <div className="chat-step chat-step-tool">
       <div className="chat-step-connector">
         <div className={cn(
           'chat-step-dot',
-          step.status === 'running' ? 'chat-step-dot-running' : 'chat-step-dot-done',
+          step.status === 'running' ? 'chat-step-dot-running'
+            : isError ? 'chat-step-dot-error'
+            : 'chat-step-dot-done',
         )}>
           {step.status === 'running' ? (
             <Loader2 size={11} className="chat-step-spin" />
+          ) : isError ? (
+            <AlertCircle size={11} />
           ) : (
             <Check size={11} />
           )}
@@ -174,18 +198,15 @@ function TimelineStep({ step }: { step: ChatStep }) {
       <div className="chat-step-body">
         <button
           className="chat-step-header"
-          onClick={() => canExpand && setExpanded(!expanded)}
-          disabled={!canExpand}
+          onClick={() => hasResult && setExpanded(!expanded)}
+          disabled={!hasResult}
         >
-          {canExpand && (expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />)}
+          {hasResult && (expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />)}
           <Wrench size={11} className="chat-step-icon" />
-          <span className="chat-step-label">{step.name}</span>
-          {inputPreview && (
-            <code className="chat-step-input">{inputPreview}</code>
-          )}
+          <span className="chat-step-label">{label}</span>
         </button>
         <AnimatePresence initial={false}>
-          {expanded && canExpand && (
+          {expanded && hasResult && (
             <motion.div
               className="chat-step-content chat-step-observation"
               initial={{ height: 0, opacity: 0 }}
@@ -193,24 +214,11 @@ function TimelineStep({ step }: { step: ChatStep }) {
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              {fullInput && (
-                <>
-                  <div className="chat-step-observation-label">
-                    <Wrench size={10} />
-                    <span>Tham số</span>
-                  </div>
-                  <pre className="chat-step-result">{fullInput}</pre>
-                </>
-              )}
-              {hasResult && (
-                <>
-                  <div className="chat-step-observation-label">
-                    <Eye size={10} />
-                    <span>Kết quả</span>
-                  </div>
-                  <pre className="chat-step-result">{step.result}</pre>
-                </>
-              )}
+              <div className="chat-step-observation-label">
+                <Eye size={10} />
+                <span>Kết quả</span>
+              </div>
+              <pre className="chat-step-result">{step.result}</pre>
             </motion.div>
           )}
         </AnimatePresence>
@@ -219,25 +227,3 @@ function TimelineStep({ step }: { step: ChatStep }) {
   )
 }
 
-/** One-line header preview: short, fits on the step header next to the tool name. */
-function formatToolInputPreview(input: Record<string, unknown>): string {
-  const keys = Object.keys(input)
-  if (keys.length === 0) return '()'
-  const short = keys
-    .map(k => {
-      const v = input[k]
-      const strVal = typeof v === 'string' ? `"${v}"` : JSON.stringify(v)
-      return `${k}: ${strVal.length > 20 ? strVal.slice(0, 20) + '…' : strVal}`
-    })
-    .join(', ')
-  return short.length > 50 ? short.slice(0, 50) + '…' : short
-}
-
-/** Full pretty-printed input for the expanded view — shown verbatim, no truncation. */
-function formatToolInputFull(input: Record<string, unknown>): string {
-  try {
-    return JSON.stringify(input, null, 2)
-  } catch {
-    return String(input)
-  }
-}
