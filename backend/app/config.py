@@ -25,10 +25,9 @@ class Settings(BaseSettings):
     # Sonnet for the main agent — it reasons across user model, facts, and tool
     # results in a single turn, so model quality directly affects advice depth.
     agent_model: str = "claude-sonnet-4-6"
-    agent_max_tokens: int = 8000
+    agent_max_tokens: int = 12000
     agent_thinking_enabled: bool = True
-    # Sonnet's extended thinking window is much larger; 8k lets it properly
-    # reason through multi-step financial questions.
+    # thinking_budget must be < max_tokens; 8k reasoning leaves ~4k for text output.
     agent_thinking_budget: int = 8000
 
     # ── Short-term memory (in-session compaction) ────────────────────────────
@@ -69,6 +68,7 @@ class Settings(BaseSettings):
     # ── Long-term memory (UserModel synthesis) ───────────────────────────────
     user_model_synthesis_cadence: int = 5   # synthesize after every N new sessions
     user_model_fact_delta_threshold: int = 5  # also synthesize when N new facts added since last run
+    user_model_max_age_days: int = 1        # also synthesize if model is older than N days and any new data exists
     user_model_max_versions: int = 3        # keep last N versions, prune older ones
 
     # ── MCP server (stdio/SSE entry point for external clients) ──────────────

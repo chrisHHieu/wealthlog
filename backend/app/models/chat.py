@@ -52,6 +52,9 @@ class ChatMessage(Base, UUIDMixin, CreatedAtMixin):
     # Full Anthropic content blocks: text, thinking (with signature), tool_use, tool_result.
     # NULL for legacy rows and simple user messages — fall back to `content` in that case.
     blocks: Mapped[list[dict[str, Any]] | None] = mapped_column(_JSONField, nullable=True)
+    # Model that produced this row — used to detect provider switches and strip
+    # incompatible thinking signatures (Claude ↔ DeepSeek cross-provider).
+    model: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     session: Mapped["ChatSession"] = relationship(back_populates="messages")
 
