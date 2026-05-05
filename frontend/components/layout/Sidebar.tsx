@@ -17,6 +17,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Repeat,
+  Sparkles,
 } from 'lucide-react'
 import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/lib/utils'
@@ -30,6 +31,7 @@ const NAV_ITEMS = [
   { href: '/goals', icon: Target, label: 'Mục tiêu', color: 'var(--accent-green)' },
   { href: '/investments', icon: TrendingUp, label: 'Đầu tư', color: 'var(--accent-gold)' },
   { href: '/reports', icon: BarChart2, label: 'Báo cáo', color: 'var(--accent-blue)' },
+  { href: '/chat', icon: Sparkles, label: 'Trợ Lý Chip', color: 'var(--accent-purple)' },
 ]
 
 export function Sidebar() {

@@ -358,21 +358,21 @@ export function BudgetPage() {
           </div>
 
           {/* Bar Chart */}
-          <div className="card" style={{ padding: '20px' }}>
+          <div className="card" style={{ padding: '20px', height: '100%' }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>So sánh ngân sách vs thực chi</div>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={chartData} layout="vertical" margin={{ left: 20, right: 20 }}>
+            <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 60)}>
+              <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }} barGap={4} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
                 <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} tickFormatter={v => formatVNDCompact(v)} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={100} />
+                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={200} />
                 <Tooltip
                   cursor={{ fill: 'transparent' }}
                   formatter={(v: any, name: any) => [formatVND(v ?? 0), name]}
                   contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--surface-border)', borderRadius: 8, fontSize: 12 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Ngân sách" fill="rgba(61,142,248,0.6)" radius={[0, 4, 4, 0]} />
-                <Bar dataKey="Đã chi" fill="rgba(255,77,109,0.8)" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="Ngân sách" fill="rgba(61,142,248,0.6)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                <Bar dataKey="Đã chi" fill="rgba(255,77,109,0.8)" radius={[0, 4, 4, 0]} maxBarSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>

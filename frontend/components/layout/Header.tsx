@@ -22,6 +22,7 @@ const PAGE_TITLES: Record<string, string> = {
   '/investments': 'Đầu tư',
   '/reports': 'Báo cáo',
   '/settings': 'Cài đặt',
+  '/chat': 'Trợ Lý Chip',
 }
 
 export function Header() {
@@ -88,7 +89,7 @@ export function Header() {
           <span className="header-btn-text">Thêm giao dịch</span>
         </button>
 
-        {!chatOpen && (
+        {!chatOpen && pathname !== '/chat' && (
           <button
             onClick={toggleChat}
             className="chat-toggle-header"
