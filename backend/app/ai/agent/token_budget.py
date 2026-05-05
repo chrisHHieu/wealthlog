@@ -20,6 +20,10 @@ async def estimate_request_tokens(
     failure so callers proceed blind rather than block on transient errors.
     """
     try:
+        # DeepSeek's Anthropic-compat endpoint doesn't properly support count_tokens
+        # (requires max_tokens, but the Anthropic SDK doesn't accept it there).
+        if model.startswith("deepseek-"):
+            return None
         kwargs: dict = {"model": model, "system": system, "messages": messages}
         if tools:
             kwargs["tools"] = tools

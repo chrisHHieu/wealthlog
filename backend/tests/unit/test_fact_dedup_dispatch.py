@@ -43,3 +43,46 @@ def test_threshold_is_passed_through():
         postgresql,
     )
     assert "0.42" in sql
+
+
+# ── _strip_code_fence ────────────────────────────────────────────────────────
+
+
+def test_strip_code_fence_plain_json():
+    from app.ai.memory.facts import _strip_code_fence
+
+    assert _strip_code_fence('[{"action": "add"}]') == '[{"action": "add"}]'
+
+
+def test_strip_code_fence_code_fence():
+    from app.ai.memory.facts import _strip_code_fence
+
+    raw = '```json\n[{"action": "add"}]\n```'
+    assert _strip_code_fence(raw) == '[{"action": "add"}]'
+
+
+def test_strip_code_fence_deepseek_think_tags():
+    """DeepSeek reasoning models prepend <think>...</think> before the JSON array."""
+    from app.ai.memory.facts import _strip_code_fence
+
+    raw = (
+        "<think>\nAnalyzing the conversation carefully...\n</think>\n"
+        '[{"action": "add", "fact": "User saves 5M/month"}]'
+    )
+    result = _strip_code_fence(raw)
+    assert result == '[{"action": "add", "fact": "User saves 5M/month"}]'
+
+
+def test_strip_code_fence_preamble_text():
+    """Handles 'Here is the JSON:' style preamble before the array."""
+    from app.ai.memory.facts import _strip_code_fence
+
+    raw = 'Here are the extracted facts:\n[{"action": "add", "fact": "test"}]'
+    result = _strip_code_fence(raw)
+    assert result == '[{"action": "add", "fact": "test"}]'
+
+
+def test_strip_code_fence_empty_array():
+    from app.ai.memory.facts import _strip_code_fence
+
+    assert _strip_code_fence("[]") == "[]"

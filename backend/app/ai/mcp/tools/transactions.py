@@ -103,18 +103,26 @@ def register(mcp: FastMCP) -> None:
         tags: list[str] | None = None,
     ) -> str:
         """Create a new transaction.
+
+        BEFORE calling: confirm with the user that you have all three:
+        1. description — what is this transaction for?
+        2. category_name — which category? (check wealthlog://categories for exact names)
+        3. account_name — which wallet/account? (ask if user has multiple and didn't specify)
+        Do NOT guess these — ask the user if any is unclear.
+
+        Parameters:
         - type: "income", "expense", or "transfer"
         - amount: VND, always positive
-        - description: short description
+        - description: short label for the transaction
         - date: YYYY-MM-DD (defaults to today)
-        - account_name: source account (defaults to the user's default account)
-        - category_name: category to associate (e.g., "Food", "Salary", "Investment")
-        - to_account_name: destination account (only when type="transfer")
+        - account_name: source account (auto-use if only one exists)
+        - category_name: must match an existing category name exactly
+        - to_account_name: destination account (only for type="transfer")
         - note: extra free-text note
         - tags: list of tag strings
 
         Example: user says "Spent 50k on lunch" →
-            type="expense", amount=50000, category_name="Food"
+            type="expense", amount=50000, description="Lunch", category_name="Food"
         """
         if type not in _VALID_TYPES:
             return f"Error: type must be one of {_VALID_TYPES}."
@@ -180,13 +188,20 @@ def register(mcp: FastMCP) -> None:
         transactions: list[dict],
     ) -> str:
         """Create multiple transactions atomically (all or nothing).
+
+        BEFORE calling: for each transaction confirm you have:
+        1. description — what is each transaction for?
+        2. category_name — check wealthlog://categories for exact names
+        3. account_name — which wallet? (ask if multiple accounts and not specified)
+        Do NOT guess — ask the user if any item is unclear.
+
         Each item is a dict with:
         - type: "income" | "expense" | "transfer" (required)
         - amount: VND amount (required)
-        - description: short description
+        - description: short label
         - date: YYYY-MM-DD (defaults to today)
         - account_name: source account
-        - category_name: category to associate
+        - category_name: must match an existing category name
         - to_account_name: destination account (for transfer)
         - note: free-text note
 

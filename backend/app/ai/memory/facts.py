@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -9,7 +10,7 @@ import anthropic
 from sqlalchemy import func, nulls_last, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+from app.ai.model_registry import get_structured_model, resolve_client_kwargs
 
 from app.ai.memory.prompts import (
     CANONICAL_TOPICS,
@@ -462,12 +463,37 @@ async def _load_existing_for_review() -> list[tuple[uuid.UUID, str]]:
 
 
 def _strip_code_fence(text: str) -> str:
-    """Remove a leading ```json ... ``` wrapper if Haiku added one."""
+    """Extract clean JSON from model response.
+
+    Handles three common model quirks:
+    - <think>...</think> reasoning tokens emitted by DeepSeek reasoning models
+    - ```json ... ``` code fences added by instruction-following models
+    - Preamble text (e.g. "Here is the JSON:") before the actual array/object
+    """
     text = text.strip()
-    if not text.startswith("```"):
-        return text
-    text = text.split("\n", 1)[1] if "\n" in text else text[3:]
-    return text.rsplit("```", 1)[0].strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        return text.rsplit("```", 1)[0].strip()
+    match = re.search(r"[\[{]", text)
+    if match:
+        start = match.start()
+        last_close = max(text.rfind("]"), text.rfind("}"))
+        if last_close > start:
+            return text[start : last_close + 1]
+    return text
+
+
+def _extract_text(response) -> str:
+    """Return the first TextBlock text from an Anthropic response.
+
+    When extended thinking is enabled, content[0] is a ThinkingBlock (no .text).
+    We skip it and find the first block whose type is 'text'.
+    """
+    for block in response.content:
+        if block.type == "text":
+            return block.text
+    return ""
 
 
 async def _apply_review_item(
@@ -531,7 +557,7 @@ async def _run_review(
     returns add/replace actions. Routing and dedup live in
     :func:`_apply_review_item`.
     """
-    if not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.deepseek_api_key:
         return
 
     try:
@@ -557,16 +583,18 @@ async def _run_review(
         else:
             review_messages.append({"role": "user", "content": REVIEW_PROMPT})
 
-        active_model = await get_preferred_model()
+        active_model = await get_structured_model()
         client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
             model=active_model,
-            max_tokens=1024,
+            max_tokens=8000,
             temperature=0.3,
             messages=review_messages,
         )
 
-        items = json.loads(_strip_code_fence(response.content[0].text))
+        raw_text = _extract_text(response)
+        cleaned = _strip_code_fence(raw_text)
+        items = json.loads(cleaned)
 
         if not isinstance(items, list) or not items:
             logger.info("Background review: no actions returned")
@@ -588,8 +616,11 @@ async def _run_review(
 
         await _maybe_consolidate(session_id)
 
-    except json.JSONDecodeError:
-        logger.warning("Background review: failed to parse JSON response")
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Background review: failed to parse JSON — %s | raw=%r",
+            exc, raw_text[:400] if "raw_text" in locals() else "<no response>",
+        )
     except Exception:
         logger.exception("Background review failed for session %s", session_id)
 
@@ -611,7 +642,7 @@ async def _count_active_facts() -> int:
         )).scalar_one()
 
 
-async def _maybe_consolidate(session_id: uuid.UUID) -> None:
+async def _maybe_consolidate(_session_id: uuid.UUID) -> None:
     """Trigger a Haiku merge pass when the fact count outgrows the budget.
 
     The threshold check runs *before* any LLM call so the no-op path is free.
@@ -619,7 +650,7 @@ async def _maybe_consolidate(session_id: uuid.UUID) -> None:
     :data:`CONSOLIDATION_PROMPT`, which only emits 'replace' actions — any
     stray 'add' items are dropped at the routing layer below.
     """
-    if not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.deepseek_api_key:
         return
 
     threshold = settings.user_fact_consolidation_threshold
@@ -638,20 +669,24 @@ async def _maybe_consolidate(session_id: uuid.UUID) -> None:
     )
 
     try:
-        active_model = await get_preferred_model()
+        active_model = await get_structured_model()
         client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
             model=active_model,
-            max_tokens=1024,
+            max_tokens=8000,
             temperature=0.3,
             messages=[{
                 "role": "user",
                 "content": f"Known facts:\n{numbered}\n\n{CONSOLIDATION_PROMPT}",
             }],
         )
-        items = json.loads(_strip_code_fence(response.content[0].text))
-    except json.JSONDecodeError:
-        logger.warning("Consolidation: failed to parse JSON response")
+        raw_text = _extract_text(response)
+        items = json.loads(_strip_code_fence(raw_text))
+    except json.JSONDecodeError as exc:
+        logger.warning(
+            "Consolidation: failed to parse JSON — %s | raw=%r",
+            exc, raw_text[:400] if "raw_text" in locals() else "<no response>",
+        )
         return
     except Exception:
         logger.exception("Consolidation API call failed")

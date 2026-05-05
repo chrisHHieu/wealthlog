@@ -90,7 +90,7 @@ async def generate_digest() -> str:
         messages=[{"role": "user", "content": "\n\n".join(prompt_parts)}],
     )
 
-    return response.content[0].text.strip()
+    return next((b.text for b in response.content if b.type == "text"), "").strip()
 
 
 async def save_digest(content: str) -> WeeklyDigest:

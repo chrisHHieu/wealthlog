@@ -45,6 +45,27 @@ def test_extract_json_invalid_returns_none():
     assert _extract_json('["an array, not an object"]') is None
 
 
+def test_extract_json_deepseek_think_tags():
+    """DeepSeek reasoning models wrap output in <think>...</think> before the JSON."""
+    from app.ai.memory.episodic import _extract_json
+
+    raw = (
+        "<think>\nLet me analyze the conversation...\nSome reasoning here.\n</think>\n"
+        '{"summary": "User wants to save money.", "key_topics": ["tiết kiệm"]}'
+    )
+    result = _extract_json(raw)
+    assert result == {"summary": "User wants to save money.", "key_topics": ["tiết kiệm"]}
+
+
+def test_extract_json_preamble_text():
+    """Some models add 'Here is the JSON:' before the actual object."""
+    from app.ai.memory.episodic import _extract_json
+
+    raw = 'Here is the summary:\n{"summary": "test", "key_topics": []}'
+    result = _extract_json(raw)
+    assert result == {"summary": "test", "key_topics": []}
+
+
 # ── summarize_session (fully mocked — no DB) ────────────────────────────────
 
 

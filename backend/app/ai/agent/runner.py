@@ -7,7 +7,7 @@ from collections.abc import AsyncGenerator
 
 import anthropic
 
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+from app.ai.model_registry import get_preferred_model, resolve_client_kwargs, supports_thinking
 
 from app.ai.agent.compaction import _compact_history, _truncate_tool_result
 from app.ai.agent.prompt import build_system_blocks
@@ -19,6 +19,7 @@ from app.ai.agent.streaming import (
     EVENT_TEXT_DELTA,
     EVENT_TEXT_START,
     EVENT_TEXT_STOP,
+    EVENT_THINKING_DELTA,
     EVENT_THINKING_START,
     EVENT_THINKING_STOP,
     EVENT_TOOL_DONE,
@@ -35,14 +36,11 @@ from app.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-def _build_thinking_param() -> dict | None:
-    """Build the `thinking` parameter for Claude API if enabled."""
-    if not settings.agent_thinking_enabled:
+def _build_thinking_param(model: str) -> dict | None:
+    """Return thinking config if the model supports it and thinking is enabled."""
+    if not settings.agent_thinking_enabled or not supports_thinking(model):
         return None
-    return {
-        "type": "enabled",
-        "budget_tokens": settings.agent_thinking_budget,
-    }
+    return {"type": "enabled", "budget_tokens": settings.agent_thinking_budget}
 
 
 async def run_agent_stream(
@@ -82,7 +80,7 @@ async def run_agent_stream(
     system_blocks = await build_system_blocks(latest_user_message=latest_user)
 
     max_result_chars = settings.agent_tool_result_max_chars
-    thinking_param = _build_thinking_param()
+    thinking_param = _build_thinking_param(active_model)
 
     async def _run_tool(tu: dict) -> tuple[dict, str, bool]:
         """Execute one tool call in parallel; return (tu, result_text, is_error)."""
@@ -134,9 +132,18 @@ async def run_agent_stream(
         stop_reason = None
         usage = {"input": 0, "cache_read": 0, "cache_write": 0, "output": 0}
 
+        # When thinking is active, Anthropic requires max_tokens > budget_tokens.
+        # Ensure this invariant regardless of what's configured in .env.
+        effective_max_tokens = settings.agent_max_tokens
+        if thinking_param:
+            effective_max_tokens = max(
+                effective_max_tokens,
+                thinking_param["budget_tokens"] + 1024,
+            )
+
         stream_kwargs: dict = {
             "model": active_model,
-            "max_tokens": settings.agent_max_tokens,
+            "max_tokens": effective_max_tokens,
             "system": system_blocks,
             "messages": claude_messages,
             "tools": tools,
@@ -206,8 +213,10 @@ async def run_agent_stream(
                         })
                     elif event.delta.type == "thinking_delta":
                         block["thinking"] += event.delta.thinking
-                        # Content stays server-side — only the indicator events
-                        # (thinking_start / thinking_stop) reach the frontend.
+                        yield sse_event(EVENT_THINKING_DELTA, {
+                            "step_id": block["step_id"],
+                            "text": event.delta.thinking,
+                        })
                     elif event.delta.type == "signature_delta":
                         # Signature must be preserved for extended thinking verification
                         block["signature"] += event.delta.signature

@@ -10,7 +10,7 @@ import anthropic
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+from app.ai.model_registry import get_structured_model, resolve_client_kwargs
 
 from app.ai.memory.facts import ensure_review_on_session_end
 from app.ai.memory.prompts import SUMMARY_PROMPT
@@ -32,7 +32,7 @@ async def summarize_session(session_id: uuid.UUID) -> bool:
     Returns True if a row was written, False if skipped (no content, API key
     missing, malformed response, or session ended mid-turn).
     """
-    if not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.deepseek_api_key:
         return False
 
     text_msgs = await _load_text_messages(session_id)
@@ -233,18 +233,18 @@ async def _load_text_messages(session_id: uuid.UUID) -> list[dict]:
 
 async def _call_summarizer(text_msgs: list[dict]) -> dict | None:
     try:
-        active_model = await get_preferred_model()
+        active_model = await get_structured_model()
         client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
             model=active_model,
-            max_tokens=700,
+            max_tokens=8000,
             temperature=0.3,
             messages=[
                 *text_msgs,
                 {"role": "user", "content": SUMMARY_PROMPT},
             ],
         )
-        return _extract_json(response.content[0].text)
+        return _extract_json(_extract_text(response))
     except Exception:
         logger.exception("Summary API call failed")
         return None
@@ -392,12 +392,28 @@ def _relative_day(dt: datetime) -> str:
 
 def _extract_json(text: str) -> dict | None:
     text = text.strip()
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
     if text.startswith("```"):
         text = text.split("\n", 1)[1] if "\n" in text else text[3:]
         text = text.rsplit("```", 1)[0].strip()
+    else:
+        match = re.search(r"[{]", text)
+        if match:
+            start = match.start()
+            last_close = text.rfind("}")
+            if last_close > start:
+                text = text[start : last_close + 1]
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
         logger.warning("Summary: failed to parse JSON response")
         return None
     return data if isinstance(data, dict) else None
+
+
+def _extract_text(response) -> str:
+    """Return the first TextBlock text — safe when thinking blocks are present."""
+    for block in response.content:
+        if block.type == "text":
+            return block.text
+    return ""

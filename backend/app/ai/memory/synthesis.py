@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 import anthropic
 from sqlalchemy import delete, func, select
 
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
+from app.ai.model_registry import get_structured_model, resolve_client_kwargs
 
 from app.ai.memory.episodic import get_recent_summaries
 from app.ai.memory.facts import get_user_facts
@@ -44,7 +44,7 @@ async def get_user_model_text() -> str | None:
 
 async def force_synthesize_user_model() -> None:
     """Immediately run synthesis regardless of cadence — used after onboarding."""
-    if not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.deepseek_api_key:
         return
     async with get_session() as db:
         session_count = (
@@ -63,15 +63,17 @@ async def _count_new_facts_since(since: datetime | None) -> int:
 
 
 async def maybe_synthesize_user_model() -> None:
-    """Schedule a background synthesis if enough new sessions OR new facts have accumulated.
+    """Schedule a background synthesis if enough new sessions OR new facts have accumulated,
+    or if the existing model is too stale.
 
-    Two triggers (whichever fires first):
+    Three triggers (whichever fires first):
     1. Session cadence — delta >= ``user_model_synthesis_cadence`` new summarized sessions.
     2. Fact delta     — >= ``user_model_fact_delta_threshold`` new facts since last synthesis.
+    3. Staleness      — model older than ``user_model_max_age_days`` AND at least 1 new fact exists.
 
     The check is cheap (three COUNT queries) so it can run on every turn.
     """
-    if not settings.anthropic_api_key:
+    if not settings.anthropic_api_key and not settings.deepseek_api_key:
         return
 
     async with get_session() as db:
@@ -90,16 +92,34 @@ async def maybe_synthesize_user_model() -> None:
     last_count = latest.session_count if latest else 0
     session_trigger = (total_sessions - last_count) >= settings.user_model_synthesis_cadence
 
+    new_facts = 0
     fact_trigger = False
+    staleness_trigger = False
+
     if not session_trigger:
         since = latest.created_at if latest else None
         new_facts = await _count_new_facts_since(since)
         fact_trigger = new_facts >= settings.user_model_fact_delta_threshold
 
-    if not session_trigger and not fact_trigger:
+    if not session_trigger and not fact_trigger and latest is not None:
+        age_days = (datetime.now(UTC) - latest.created_at).days
+        if age_days >= settings.user_model_max_age_days:
+            # Re-synthesize if stale even with minimal new data
+            since = latest.created_at
+            if new_facts == 0:
+                new_facts = await _count_new_facts_since(since)
+            staleness_trigger = new_facts >= 1
+
+    if not session_trigger and not fact_trigger and not staleness_trigger:
         return
 
-    reason = "session cadence" if session_trigger else f"fact delta ({new_facts} new facts)"
+    if session_trigger:
+        reason = "session cadence"
+    elif fact_trigger:
+        reason = f"fact delta ({new_facts} new facts)"
+    else:
+        reason = f"staleness ({(datetime.now(UTC) - latest.created_at).days}d old, {new_facts} new facts)"
+
     logger.info("Scheduling UserModel synthesis — trigger: %s", reason)
     asyncio.create_task(_run_synthesis(total_sessions))
 
@@ -118,16 +138,18 @@ async def _run_synthesis(session_count: int) -> None:
 
         prompt = _build_synthesis_input(facts, summaries, existing)
 
-        active_model = await get_preferred_model()
+        active_model = await get_structured_model()
         client = anthropic.AsyncAnthropic(**resolve_client_kwargs(active_model))
         response = await client.messages.create(
             model=active_model,
-            max_tokens=1500,
+            max_tokens=8000,
             temperature=0.2,
             messages=[{"role": "user", "content": prompt}],
         )
 
-        content = response.content[0].text.strip()
+        content = next(
+            (b.text for b in response.content if b.type == "text"), ""
+        ).strip()
         if not content:
             logger.warning("UserModel synthesis returned empty content")
             return

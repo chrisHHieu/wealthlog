@@ -51,3 +51,26 @@ def resolve_client_kwargs(model: str) -> dict:
     if is_deepseek:
         kwargs["base_url"] = "https://api.deepseek.com/anthropic"
     return kwargs
+
+
+def get_provider(model: str) -> str:
+    """Return 'deepseek' or 'anthropic' based on the model string."""
+    return "deepseek" if model.startswith("deepseek-") else "anthropic"
+
+
+async def get_structured_model() -> str:
+    """Return the preferred model for structured JSON tasks (fact review, synthesis, summarization).
+
+    Follows the user's preferred model so memory tasks use the same provider as chat.
+    Falls back to env default when no preference is stored or no key is available.
+    """
+    return await get_preferred_model()
+
+
+def supports_thinking(model: str) -> bool:
+    """Return True if the model supports extended thinking."""
+    return (
+        model.startswith("claude-sonnet")
+        or model.startswith("claude-opus")
+        or model == "deepseek-v4-pro"
+    )
