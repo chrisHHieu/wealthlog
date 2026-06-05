@@ -2,8 +2,9 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { formatVNDCompact } from '@/lib/utils'
 import { ChartPoint } from '@/types'
 import { ReportMode } from '@/hooks/useReports'
+import { ChartTooltipProps } from '@/types/chart'
 
-function ChartTooltip({ active, payload, label }: any) {
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div style={{
@@ -11,11 +12,11 @@ function ChartTooltip({ active, payload, label }: any) {
       borderRadius: 10, padding: '12px 16px', fontSize: 12,
     }}>
       <div style={{ color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
           <div style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
           <span style={{ color: 'var(--text-secondary)' }}>{p.name}:</span>
-          <strong style={{ color: 'var(--text-primary)' }}>{formatVNDCompact(p.value)}</strong>
+          <strong style={{ color: 'var(--text-primary)' }}>{formatVNDCompact(Number(p.value ?? 0))}</strong>
         </div>
       ))}
     </div>
@@ -42,10 +43,10 @@ export function IncomeExpenseChart({ data, mode, isLoading }: IncomeExpenseChart
   return (
     <div className="card" style={{ padding: 20 }}>
       <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
-        Thu nhập vs Chi tiêu
+        Income vs Expense
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
-        {mode === 'month' ? 'Biến động theo ngày trong tháng' : 'So sánh theo từng tháng'}
+        {mode === 'month' ? 'Daily movement within the month' : 'Monthly comparison'}
       </div>
 
       <ResponsiveContainer width="100%" height={280}>
@@ -71,8 +72,8 @@ export function IncomeExpenseChart({ data, mode, isLoading }: IncomeExpenseChart
             iconType="square"
             iconSize={10}
           />
-          <Bar name="Thu nhập" dataKey="income" fill="var(--accent-green)" radius={[4, 4, 0, 0]} opacity={0.85} />
-          <Bar name="Chi tiêu" dataKey="expense" fill="var(--accent-red)" radius={[4, 4, 0, 0]} opacity={0.85} />
+          <Bar name="Income" dataKey="income" fill="var(--accent-green)" radius={[4, 4, 0, 0]} opacity={0.85} />
+          <Bar name="Expense" dataKey="expense" fill="var(--accent-red)" radius={[4, 4, 0, 0]} opacity={0.85} />
         </BarChart>
       </ResponsiveContainer>
     </div>

@@ -41,13 +41,13 @@ export function GoalCard({ goal, index, onContribute, onEdit, onDelete }: GoalCa
 
           {daysLeft !== null && (
             <div style={{ fontSize: 11, color: daysLeft < 30 ? 'var(--accent-red)' : 'var(--text-tertiary)', marginBottom: 4 }}>
-              ⏰ Còn {daysLeft} ngày
+              ⏰ Left {daysLeft} days
             </div>
           )}
 
           {monthlyNeeded && monthlyNeeded > 0 && (
             <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-              Cần tiết kiệm {formatVNDCompact(monthlyNeeded)}/tháng
+              Need to save {formatVNDCompact(monthlyNeeded)}/month
             </div>
           )}
         </div>
@@ -59,7 +59,7 @@ export function GoalCard({ goal, index, onContribute, onEdit, onDelete }: GoalCa
           style={{ flex: 2, fontSize: 12 }}
           onClick={() => onContribute(goal)}
         >
-          <PiggyBank size={13} /> Thêm tiền
+          <PiggyBank size={13} /> Add money
         </button>
         <button
           className="btn btn-secondary btn-sm"

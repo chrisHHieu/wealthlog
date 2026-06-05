@@ -1,12 +1,11 @@
 """Tests for importance scoring + access tracking on user facts."""
 
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 # ── _clamp_importance (pure) ───────────────────────────────────────────────
 
@@ -58,8 +57,8 @@ def _patch_session(db: AsyncSession):
 
 
 async def test_get_user_facts_orders_by_importance(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(fact="minor detail", category="general", importance=2))
     db.add(UserFact(fact="core goal", category="goal", importance=9))
@@ -74,10 +73,10 @@ async def test_get_user_facts_orders_by_importance(db: AsyncSession):
 
 
 async def test_get_user_facts_tiebreaks_on_recent_access(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add(UserFact(fact="never accessed", category="general", importance=5))
     db.add(UserFact(fact="accessed recently", category="general", importance=5,
                     last_accessed_at=now))
@@ -95,8 +94,8 @@ async def test_get_user_facts_tiebreaks_on_recent_access(db: AsyncSession):
 
 
 async def test_get_user_facts_bumps_access_count(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(fact="a", category="general", importance=5))
     db.add(UserFact(fact="b", category="general", importance=5))
@@ -112,8 +111,8 @@ async def test_get_user_facts_bumps_access_count(db: AsyncSession):
 
 
 async def test_get_user_facts_track_access_disabled(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(fact="only read", category="general", importance=5))
     await db.flush()
@@ -127,8 +126,8 @@ async def test_get_user_facts_track_access_disabled(db: AsyncSession):
 
 
 async def test_get_user_facts_exposes_importance(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(fact="big goal", category="goal", importance=9))
     await db.flush()
@@ -143,8 +142,8 @@ async def test_get_user_facts_exposes_importance(db: AsyncSession):
 
 
 async def test_save_user_fact_persists_importance(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         result = await memory_module.save_user_fact(
@@ -157,8 +156,8 @@ async def test_save_user_fact_persists_importance(db: AsyncSession):
 
 
 async def test_save_user_fact_default_importance(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         await memory_module.save_user_fact(fact="neutral fact")
@@ -190,8 +189,8 @@ def test_clamp_confidence_clamps_and_defaults():
 
 
 async def test_verified_facts_outrank_unverified_at_equal_importance(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(
         fact="reviewer guess", category="goal", importance=8,
@@ -211,8 +210,8 @@ async def test_verified_facts_outrank_unverified_at_equal_importance(db: AsyncSe
 
 
 async def test_get_user_facts_exposes_verified_flag(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(
         fact="signed off", category="goal", importance=7,
@@ -228,8 +227,8 @@ async def test_get_user_facts_exposes_verified_flag(db: AsyncSession):
 
 async def test_higher_importance_still_beats_verified(db: AsyncSession):
     """Verified is a tie-breaker, not an override of the primary signal."""
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(
         fact="critical guess", category="goal", importance=9,
@@ -248,8 +247,8 @@ async def test_higher_importance_still_beats_verified(db: AsyncSession):
 
 
 async def test_confidence_breaks_ties_when_verified_status_matches(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(
         fact="low conf", category="goal", importance=7,
@@ -268,8 +267,8 @@ async def test_confidence_breaks_ties_when_verified_status_matches(db: AsyncSess
 
 
 async def test_save_user_fact_persists_confidence(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         await memory_module.save_user_fact(
@@ -285,8 +284,8 @@ async def test_save_user_fact_persists_confidence(db: AsyncSession):
 
 
 async def test_build_facts_prompt_marks_verified(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     db.add(UserFact(
         fact="confirmed goal", category="goal", importance=8,

@@ -8,9 +8,9 @@ interface MonthPickerProps {
 }
 
 const MONTHS = [
-  'Tháng 1', 'Tháng 2', 'Tháng 3', 'Tháng 4',
-  'Tháng 5', 'Tháng 6', 'Tháng 7', 'Tháng 8',
-  'Tháng 9', 'Tháng 10', 'Tháng 11', 'Tháng 12'
+  'Month 1', 'Month 2', 'Month 3', 'Month 4',
+  'Month 5', 'Month 6', 'Month 7', 'Month 8',
+  'Month 9', 'Month 10', 'Month 11', 'Month 12'
 ]
 
 export function MonthPicker({ value, onChange }: MonthPickerProps) {
@@ -58,9 +58,9 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
     setIsOpen(false)
   }
 
-  let displayText = 'Chọn tháng...'
+  let displayText = 'Select months...'
   if (value) {
-    displayText = `Tháng ${selectedMonth}, ${selectedYear}`
+    displayText = `Month ${selectedMonth}, ${selectedYear}`
   }
 
   return (
@@ -150,7 +150,7 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
                       if (!isSelected && !isFuture) e.currentTarget.style.background = 'transparent'
                     }}
                   >
-                    {mName.replace('Tháng ', 'T')}
+                    {mName.replace('Month ', 'T')}
                   </button>
                 )
               })}
@@ -163,14 +163,14 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
                 className="btn btn-ghost btn-sm"
                 style={{ fontSize: 12, padding: '4px 8px', color: 'var(--text-tertiary)' }}
               >
-                Bỏ chọn
+                Clear
               </button>
               <button 
                 onClick={handleSetCurrent}
                 className="btn btn-ghost btn-sm"
                 style={{ fontSize: 12, padding: '4px 8px', color: 'var(--accent-green)' }}
               >
-                Tháng này
+                This month
               </button>
             </div>
           </motion.div>

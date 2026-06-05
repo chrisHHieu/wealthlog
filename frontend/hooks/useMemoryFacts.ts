@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 
 export interface UserFact {
   id: string
@@ -19,17 +19,16 @@ export interface UserFact {
 
 export function useMemoryFacts() {
   return useQuery<UserFact[]>({
-    queryKey: ['memory-facts'],
-    queryFn: () => fetch(`${API_URL}/api/memory/facts`).then(r => r.json()),
+    queryKey: queryKeys.memoryFacts,
+    queryFn: () => apiGet<UserFact[]>('/api/memory/facts'),
   })
 }
 
 export function useDeleteFact() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: (id: string) =>
-      fetch(`${API_URL}/api/memory/facts/${id}`, { method: 'DELETE' }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memory-facts'] }),
+    mutationFn: (id: string) => apiDelete(`/api/memory/facts/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.memoryFacts }),
   })
 }
 
@@ -37,17 +36,16 @@ export function useVerifyFact() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: (f: UserFact) =>
-      fetch(`${API_URL}/api/memory/facts/${f.id}`, {
+      apiJson(`/api/memory/facts/${f.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           fact: f.fact,
           category: f.category,
           importance: f.importance,
           topics: f.topics,
           verifiedByUser: true,
-        }),
+        },
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['memory-facts'] }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.memoryFacts }),
   })
 }

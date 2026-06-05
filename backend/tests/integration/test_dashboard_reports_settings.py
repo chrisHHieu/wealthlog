@@ -4,6 +4,12 @@ import pytest
 from httpx import AsyncClient
 
 
+async def test_request_id_header_is_returned(client: AsyncClient):
+    r = await client.get("/health", headers={"X-Request-ID": "test-request-id"})
+    assert r.status_code == 200
+    assert r.headers["X-Request-ID"] == "test-request-id"
+
+
 @pytest.fixture
 async def populated(client: AsyncClient):
     """Create sample data for dashboard/reports tests."""

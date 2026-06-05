@@ -60,4 +60,5 @@ class ChatMessage(Base, UUIDMixin, CreatedAtMixin):
 
     __table_args__ = (
         Index("ix_chat_messages_session_id", "session_id"),
+        Index("ix_chat_messages_session_role_created", "session_id", "role", "created_at"),
     )

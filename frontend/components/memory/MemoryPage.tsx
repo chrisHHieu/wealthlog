@@ -8,14 +8,14 @@ import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
 import { useMemoryFacts, useDeleteFact, useVerifyFact, UserFact } from '@/hooks/useMemoryFacts'
 
 const CATEGORY_LABELS: Record<string, string> = {
-  preference:  'Sở thích',
-  habit:       'Thói quen',
-  goal:        'Mục tiêu',
-  context:     'Bối cảnh',
-  pattern:     'Hành vi',
-  commitment:  'Cam kết',
-  emotion:     'Cảm xúc',
-  general:     'Chung',
+  preference:  'Preferences',
+  habit:       'Habits',
+  goal:        'Goals',
+  context:     'Context',
+  pattern:     'Patterns',
+  commitment:  'Commitments',
+  emotion:     'Emotions',
+  general:     'General',
 }
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -67,13 +67,13 @@ export function MemoryPage() {
   async function handleDelete() {
     if (!deleteTarget) return
     await deleteMutation.mutateAsync(deleteTarget.id)
-    toast('Đã xóa fact')
+    toast('Fact deleted')
     setDeleteTarget(null)
   }
 
   async function handleVerify(fact: UserFact) {
     await verifyMutation.mutateAsync(fact)
-    toast('Đã xác nhận fact')
+    toast('Fact confirmed')
   }
 
   return (
@@ -85,10 +85,10 @@ export function MemoryPage() {
             <Brain size={24} color="var(--accent-purple)" />
             <div>
               <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0 }}>
-                Bộ nhớ AI
+                AI Memory
               </h1>
               <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-                Những gì agent ghi nhớ về bạn
+                What the assistant remembers about you
               </p>
             </div>
           </div>
@@ -99,13 +99,13 @@ export function MemoryPage() {
               <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--accent-green)' }}>
                 {totalCount}
               </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Tổng facts</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Total facts</div>
             </div>
             <div>
               <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--accent-blue)' }}>
                 {verifiedCount}
               </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Đã xác nhận</div>
+              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Confirmed</div>
             </div>
           </div>
         </div>
@@ -129,7 +129,7 @@ export function MemoryPage() {
                 transition: 'all 0.15s',
               }}
             >
-              {cat === ALL ? 'Tất cả' : CATEGORY_LABELS[cat] ?? cat}
+              {cat === ALL ? 'All' : CATEGORY_LABELS[cat] ?? cat}
             </button>
           ))}
         </div>
@@ -137,7 +137,7 @@ export function MemoryPage() {
         {/* Facts list */}
         {isLoading ? (
           <div style={{ color: 'var(--text-secondary)', padding: 'var(--space-8)', textAlign: 'center' }}>
-            Đang tải...
+            Loading...
           </div>
         ) : filtered.length === 0 ? (
           <div style={{
@@ -148,7 +148,7 @@ export function MemoryPage() {
             borderRadius: 'var(--radius-lg)',
           }}>
             <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
-            <div>Chưa có facts nào. Hãy trò chuyện với AI để bắt đầu.</div>
+            <div>No facts yet. Chat with AI to get started.</div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
@@ -227,7 +227,7 @@ export function MemoryPage() {
                     {!fact.verifiedByUser && (
                       <button
                         onClick={() => handleVerify(fact)}
-                        title="Xác nhận fact này"
+                        title="Confirm this fact"
                         style={{
                           padding: 6,
                           background: 'transparent',
@@ -244,7 +244,7 @@ export function MemoryPage() {
                     )}
                     <button
                       onClick={() => setDeleteTarget(fact)}
-                      title="Xóa fact này"
+                      title="Delete this fact"
                       style={{
                         padding: 6,
                         background: 'transparent',
@@ -268,7 +268,7 @@ export function MemoryPage() {
 
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="Xóa fact này?"
+        title="Delete this fact?"
         description={deleteTarget?.fact ?? ''}
         onConfirm={handleDelete}
         onClose={() => setDeleteTarget(null)}

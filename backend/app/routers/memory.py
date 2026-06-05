@@ -20,6 +20,7 @@ class FactResponse(CamelModel):
     category: str
     importance: int
     topics: list[str]
+    verified_by_user: bool
     expires_at: datetime | None
     access_count: int
     last_accessed_at: datetime | None
@@ -51,6 +52,7 @@ def _to_response(r: UserFact) -> FactResponse:
         category=r.category,
         importance=r.importance,
         topics=r.topics or [],
+        verified_by_user=r.verified_by_user,
         expires_at=r.expires_at,
         access_count=r.access_count,
         last_accessed_at=r.last_accessed_at,

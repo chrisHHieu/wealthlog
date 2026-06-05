@@ -3,31 +3,36 @@ import { motion } from 'framer-motion'
 import { formatVND, formatVNDCompact } from '@/lib/utils'
 import { DashboardData } from '@/types'
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter'
+import { ChartTooltipProps } from '@/types/chart'
 
 interface SpendingBreakdownProps {
   data?: DashboardData
   isLoading: boolean
 }
 
-function DonutTooltip({ active, payload }: any) {
+interface SpendingSlice {
+  icon: string
+}
+
+function DonutTooltip({ active, payload }: ChartTooltipProps<SpendingSlice>) {
   if (!active || !payload?.length) return null
   const d = payload[0]
   return (
     <div className="chart-tooltip">
       <div style={{ fontWeight: 600, color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}>
-        {d.payload.icon} {d.name}
+        {d.payload?.icon} {d.name}
       </div>
       <div style={{ marginTop: 'var(--space-1)', color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>
-        {formatVND(d.value)}
+        {formatVND(Number(d.value ?? 0))}
       </div>
     </div>
   )
 }
 
 const GROUP_CONFIG = {
-  needs:   { label: 'Thiết yếu', target: 50, color: '#3B82F6' },
-  wants:   { label: 'Mong muốn', target: 30, color: '#00B386' },
-  savings: { label: 'Tiết kiệm', target: 20, color: '#E8A838' },
+  needs:   { label: 'Needs', target: 50, color: '#3B82F6' },
+  wants:   { label: 'Wants', target: 30, color: '#00B386' },
+  savings: { label: 'Savings', target: 20, color: '#E8A838' },
 } as const
 
 export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
@@ -56,10 +61,10 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 'var(--space-4)' }}>
         <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
-          Cơ cấu Chi tiêu
+          Expense breakdown
         </div>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 2 }}>
-          Quy tắc 50/30/20
+          50/30/20 rule
         </div>
       </div>
 
@@ -68,7 +73,7 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
       ) : pieData.length === 0 ? (
         <div className="empty-state" style={{ flex: 1 }}>
           <span style={{ fontSize: 32 }}>🍕</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>Chưa có dữ liệu chi tiêu</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>No spending data yet</span>
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -126,7 +131,7 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.08em',
               }}>
-                Tổng chi
+                Total expense
               </div>
             </div>
           </div>

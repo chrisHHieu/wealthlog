@@ -14,10 +14,10 @@ import { ChatInput } from './ChatInput'
 import { useChat, useSessions, useModel } from '@/hooks/useChatState'
 
 const SUGGESTIONS = [
-  { icon: BarChart3,  label: 'Tổng quan tài chính tháng này', color: 'purple' },
-  { icon: Wallet,     label: 'Ngân sách còn bao nhiêu?',      color: 'blue'   },
-  { icon: TrendingUp, label: 'Top chi tiêu lớn nhất',         color: 'green'  },
-  { icon: Target,     label: 'Tiến độ mục tiêu tiết kiệm',    color: 'gold'   },
+  { icon: BarChart3,  label: 'Financial overview this month', color: 'purple' },
+  { icon: Wallet,     label: 'How much budget is left?',      color: 'blue'   },
+  { icon: TrendingUp, label: 'Top spending items',         color: 'green'  },
+  { icon: Target,     label: 'Savings goal progress',    color: 'gold'   },
 ] as const
 
 export function ChatPanel() {
@@ -99,7 +99,7 @@ export function ChatPanel() {
               ) : (
                 <div className="chat-header-icon"><Sparkles size={14} /></div>
               )}
-              <h3>{showHistory ? 'Lịch sử' : 'Chip'}</h3>
+              <h3>{showHistory ? 'History' : 'Expensep'}</h3>
               {!showHistory && models.length > 0 && (
                 <div className="chat-model-picker">
                   <button className="chat-model-btn" onClick={() => setShowModelPicker(v => !v)}>
@@ -134,18 +134,18 @@ export function ChatPanel() {
             <div className="chat-header-actions">
               {!showHistory && (
                 <>
-                  <button className="chat-header-btn" onClick={() => setShowHistory(true)} title="Lịch sử trò chuyện">
+                  <button className="chat-header-btn" onClick={() => setShowHistory(true)} title="Chat history">
                     <MessageSquare size={14} />
                   </button>
-                  <button className="chat-header-btn" onClick={newSession} title="Cuộc trò chuyện mới">
+                  <button className="chat-header-btn" onClick={newSession} title="New conversation">
                     <Plus size={14} />
                   </button>
-                  <button className="chat-header-btn" onClick={handleExpand} title="Mở rộng toàn trang">
+                  <button className="chat-header-btn" onClick={handleExpand} title="Open full page">
                     <Maximize2 size={14} />
                   </button>
                 </>
               )}
-              <button className="chat-header-btn" onClick={closeChat} title="Đóng (Ctrl+/)">
+              <button className="chat-header-btn" onClick={closeChat} title="Close (Ctrl+/)">
                 <X size={14} />
               </button>
             </div>
@@ -154,7 +154,7 @@ export function ChatPanel() {
           {showHistory ? (
             <div className="chat-messages">
               {sessions.length === 0 ? (
-                <div className="chat-empty-history"><p>Chưa có cuộc trò chuyện nào.</p></div>
+                <div className="chat-empty-history"><p>No conversations yet.</p></div>
               ) : (
                 <div className="chat-session-list">
                   {sessions.map(s => (
@@ -165,12 +165,12 @@ export function ChatPanel() {
                     >
                       <div className="chat-session-info">
                         <span className="chat-session-title">{s.title}</span>
-                        <span className="chat-session-meta">{s.messageCount} tin nhắn</span>
+                        <span className="chat-session-meta">{s.messageCount} messages</span>
                       </div>
                       <button
                         className="chat-session-delete"
                         onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
-                        title="Xóa"
+                        title="Delete"
                       >
                         <Trash2 size={12} />
                       </button>
@@ -185,9 +185,9 @@ export function ChatPanel() {
                 {messages.length === 0 && (
                   <div className="chat-empty">
                     <div className="chat-empty-hero">
-                      <div className="chat-empty-logo"><Image src="/images/ai-avatar.png" alt="Chip" fill style={{ objectFit: 'contain' }} /></div>
-                      <p className="chat-empty-greeting">Tôi có thể giúp gì?</p>
-                      <p className="chat-empty-sub">Phân tích chi tiêu, kiểm tra ngân sách, theo dõi mục tiêu và hơn thế nữa.</p>
+                      <div className="chat-empty-logo"><Image src="/images/ai-avatar.png" alt="Expensep" fill style={{ objectFit: 'contain' }} /></div>
+                      <p className="chat-empty-greeting">How can I help?</p>
+                      <p className="chat-empty-sub">Analyze spending, check budgets, track goals, and more.</p>
                     </div>
                     <div className="chat-empty-suggestions">
                       {SUGGESTIONS.map(({ icon: Icon, label, color }) => (

@@ -2,11 +2,10 @@
 
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy.ext.asyncio import AsyncSession
-
 
 # ── Pure helpers ────────────────────────────────────────────────────────────
 
@@ -14,11 +13,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 def test_relative_day_labels():
     from app.ai.memory.episodic import _relative_day
 
-    now = datetime.now(timezone.utc)
-    assert _relative_day(now) == "hôm nay"
-    assert _relative_day(now - timedelta(days=1)) == "hôm qua"
-    assert _relative_day(now - timedelta(days=3)) == "3 ngày trước"
-    assert _relative_day(now - timedelta(days=10)) == "1 tuần trước"
+    now = datetime.now(UTC)
+    assert _relative_day(now) == "today"
+    assert _relative_day(now - timedelta(days=1)) == "yesterday"
+    assert _relative_day(now - timedelta(days=3)) == "3 days ago"
+    assert _relative_day(now - timedelta(days=10)) == "1 week(s) ago"
     # 30+ days → date fallback
     long_ago = _relative_day(now - timedelta(days=45))
     assert "/" in long_ago
@@ -129,7 +128,7 @@ async def test_summarize_session_happy_path_upserts():
         assert await summary_module.summarize_session(sid) is True
 
     upsert_mock.assert_awaited_once()
-    called_sid, called_summary, called_topics = upsert_mock.await_args.args
+    called_sid, called_summary, called_topics = upsert_mock.await_args.args[:3]
     assert called_sid == sid
     assert "tiết kiệm" in called_summary.lower() or "mua xe" in called_summary.lower()
     assert called_topics == ["tiết kiệm", "mua xe"]
@@ -187,7 +186,7 @@ async def test_summarize_session_tolerates_non_list_topics():
         s.session_summary_model = "claude-haiku-4-5-20251001"
         await summary_module.summarize_session(uuid.uuid4())
 
-    _, _, topics = upsert_mock.await_args.args
+    _, _, topics = upsert_mock.await_args.args[:3]
     assert topics == []
 
 
@@ -197,10 +196,10 @@ async def test_summarize_session_tolerates_non_list_topics():
 async def test_get_user_facts_filters_expired(db: AsyncSession):
     from contextlib import asynccontextmanager
 
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     db.add(UserFact(fact="evergreen", category="preference", expires_at=None))
     db.add(UserFact(fact="still valid", category="context",
                     expires_at=now + timedelta(days=1)))
@@ -229,7 +228,7 @@ def test_compute_expiry_reviewer_explicit_days():
 
     out = _compute_expiry({"expires_in_days": 30}, "context")
     assert out is not None
-    assert (out - datetime.now(timezone.utc)).days in (29, 30)
+    assert (out - datetime.now(UTC)).days in (29, 30)
 
 
 def test_compute_expiry_context_default_fallback():
@@ -240,7 +239,7 @@ def test_compute_expiry_context_default_fallback():
         out = memory_module._compute_expiry({}, "context")
 
     assert out is not None
-    assert (out - datetime.now(timezone.utc)).days in (44, 45)
+    assert (out - datetime.now(UTC)).days in (44, 45)
 
 
 def test_compute_expiry_evergreen_categories_return_none():

@@ -15,9 +15,9 @@ export function BudgetProgress({ data, isLoading }: BudgetProgressProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-5)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Tiến độ Ngân sách</div>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Budget progress</div>
         <Link href="/budget" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-          Xem tất cả <ArrowRight size={14} />
+          View all <ArrowRight size={14} />
         </Link>
       </div>
 
@@ -28,9 +28,9 @@ export function BudgetProgress({ data, isLoading }: BudgetProgressProps) {
       ) : budgets.length === 0 ? (
         <div className="empty-state" style={{ flex: 1, padding: 'var(--space-6) var(--space-3)' }}>
           <span style={{ fontSize: 32 }}>📋</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>Chưa thiết lập ngân sách</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>No budgets set</span>
           <Link href="/budget" className="btn btn-primary btn-sm" style={{ marginTop: 'var(--space-2)' }}>
-            Tạo ngân sách
+            Create budget
           </Link>
         </div>
       ) : (

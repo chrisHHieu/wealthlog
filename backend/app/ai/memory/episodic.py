@@ -10,10 +10,9 @@ import anthropic
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
-from app.ai.model_registry import get_structured_model, resolve_client_kwargs
-
 from app.ai.memory.facts import ensure_review_on_session_end
 from app.ai.memory.prompts import SUMMARY_PROMPT
+from app.ai.model_registry import get_structured_model, resolve_client_kwargs
 from app.config import settings
 from app.database import get_session
 from app.logging_config import get_logger
@@ -21,6 +20,10 @@ from app.models.chat import ChatMessage, ChatSession
 from app.models.session_summary import SessionSummary
 
 logger = get_logger(__name__)
+
+
+def _has_api_key(value: object) -> bool:
+    return isinstance(value, str) and bool(value.strip())
 
 
 # ── Summarization ────────────────────────────────────────────────────────────
@@ -32,7 +35,9 @@ async def summarize_session(session_id: uuid.UUID) -> bool:
     Returns True if a row was written, False if skipped (no content, API key
     missing, malformed response, or session ended mid-turn).
     """
-    if not settings.anthropic_api_key and not settings.deepseek_api_key:
+    if not _has_api_key(getattr(settings, "anthropic_api_key", "")) and not _has_api_key(
+        getattr(settings, "deepseek_api_key", ""),
+    ):
         return False
 
     text_msgs = await _load_text_messages(session_id)
@@ -81,7 +86,12 @@ async def summarize_session(session_id: uuid.UUID) -> bool:
     )
 
     # Ensure short sessions (< cadence turns) still get fact extraction.
-    await ensure_review_on_session_end(session_id, text_msgs)
+    # This is a secondary side effect; a DB/review issue must not invalidate
+    # an otherwise successful summary.
+    try:
+        await ensure_review_on_session_end(session_id, text_msgs)
+    except Exception:
+        logger.exception("Failed to trigger end-of-session review for %s", session_id)
 
     return True
 
@@ -255,11 +265,13 @@ async def _upsert_summary(
     summary_text: str,
     topics: list[str],
     outcome: str | None,
-    commitments: list[str],
-    pushback: str | None,
-    open_questions: list[str],
+    commitments: list[str] | None = None,
+    pushback: str | None = None,
+    open_questions: list[str] | None = None,
 ) -> None:
     now = datetime.now(UTC)
+    commitments = commitments or []
+    open_questions = open_questions or []
     async with get_session() as db:
         if db.bind.dialect.name == "postgresql":
             stmt = (
@@ -414,6 +426,10 @@ def _extract_json(text: str) -> dict | None:
 def _extract_text(response) -> str:
     """Return the first TextBlock text — safe when thinking blocks are present."""
     for block in response.content:
-        if block.type == "text":
-            return block.text
+        text = getattr(block, "text", None)
+        block_type = getattr(block, "type", "text")
+        if isinstance(text, str) and (
+            block_type == "text" or not isinstance(block_type, str)
+        ):
+            return text
     return ""

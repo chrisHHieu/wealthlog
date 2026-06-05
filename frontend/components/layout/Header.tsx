@@ -1,28 +1,31 @@
 'use client'
 
-import { Plus, Menu, Sparkles } from 'lucide-react'
-import { useAppStore } from '@/store/useAppStore'
-import { getGreeting } from '@/lib/utils'
-import { cn } from '@/lib/utils'
-import { useQuery } from '@tanstack/react-query'
-import { API_URL } from '@/lib/api'
+import { Menu, Moon, Plus, Sparkles, Sun } from 'lucide-react'
 import { usePathname } from 'next/navigation'
+import { useQuery } from '@tanstack/react-query'
+import { apiGet, queryKeys } from '@/lib/api'
+import { cn, getGreeting } from '@/lib/utils'
+import { useAppStore } from '@/store/useAppStore'
 
 interface Settings {
   userName?: string
 }
 
+interface SettingsResponse {
+  data?: Settings
+}
+
 const PAGE_TITLES: Record<string, string> = {
   '/': 'Dashboard',
-  '/transactions': 'Giao dịch',
-  '/accounts': 'Tài khoản',
-  '/budget': 'Ngân sách',
-  '/recurring': 'Định kỳ',
-  '/goals': 'Mục tiêu',
-  '/investments': 'Đầu tư',
-  '/reports': 'Báo cáo',
-  '/settings': 'Cài đặt',
-  '/chat': 'Trợ Lý Chip',
+  '/transactions': 'Transactions',
+  '/accounts': 'Accounts',
+  '/budget': 'Budget',
+  '/recurring': 'Recurring',
+  '/goals': 'Goals',
+  '/investments': 'Investments',
+  '/reports': 'Reports',
+  '/settings': 'Settings',
+  '/chat': 'Chip Assistant',
 }
 
 export function Header() {
@@ -30,30 +33,32 @@ export function Header() {
   const pathname = usePathname()
 
   const { data: settings } = useQuery<Settings>({
-    queryKey: ['settings'],
-    queryFn: () => fetch(`${API_URL}/api/settings`).then(r => r.json()).then(r => r.data ?? r),
+    queryKey: queryKeys.settings,
+    queryFn: async () => {
+      const response = await apiGet<Settings | SettingsResponse>('/api/settings')
+      if ('data' in response && response.data) return response.data
+      return response as Settings
+    },
   })
 
-  const userName = settings?.userName ?? 'Bạn'
+  const userName = settings?.userName ?? 'You'
   const greeting = getGreeting()
   const now = new Date()
-  const hour = now.getHours()
-  const greetingIcon = hour < 5 ? '🌙' : hour < 11 ? '☀️' : hour < 14 ? '🌤️' : hour < 18 ? '🌤️' : '🌙'
+  const isDaytime = now.getHours() >= 5 && now.getHours() < 18
   const pageTitle = PAGE_TITLES[pathname] || 'WealthLog'
 
   return (
     <header className={cn('header', sidebarCollapsed && 'sidebar-collapsed', chatOpen && 'chat-open')}>
-      {/* Mobile hamburger */}
       <button
         onClick={() => setMobileMenu(!mobileMenuOpen)}
         className="btn-icon"
         style={{ display: 'none', border: 'none', background: 'none' }}
         id="mobile-menu-btn"
+        aria-label="Open navigation"
       >
         <Menu size={20} />
       </button>
 
-      {/* Left: Greeting + page context */}
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{
           fontSize: 'var(--text-base)',
@@ -64,7 +69,7 @@ export function Header() {
           gap: 'var(--space-2)',
         }}>
           <span>{greeting}, {userName}</span>
-          <span>{greetingIcon}</span>
+          {isDaytime ? <Sun size={16} /> : <Moon size={16} />}
         </div>
         <div style={{
           fontSize: 'var(--text-xs)',
@@ -73,27 +78,26 @@ export function Header() {
         }}>
           {pageTitle}
           {pathname === '/' && (
-            <span> · {now.toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}</span>
+            <span> - {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
           )}
         </div>
       </div>
 
-      {/* Right: Add transaction + AI Chat toggle */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexShrink: 0 }}>
+      <div className="header-actions">
         <button
           id="header-add-transaction"
           onClick={() => openAddTransaction()}
           className="btn btn-primary btn-sm"
         >
           <Plus size={14} />
-          <span className="header-btn-text">Thêm giao dịch</span>
+          <span className="header-btn-text">Add transaction</span>
         </button>
 
         {!chatOpen && pathname !== '/chat' && (
           <button
             onClick={toggleChat}
             className="chat-toggle-header"
-            title="Trợ lý AI (Ctrl+/)"
+            title="AI assistant (Ctrl+/)"
           >
             <Sparkles size={15} />
             <span className="header-btn-text">AI</span>
@@ -102,14 +106,38 @@ export function Header() {
       </div>
 
       <style jsx>{`
+        .header-actions {
+          display: flex;
+          align-items: center;
+          gap: var(--space-2);
+          flex-shrink: 0;
+        }
+
         @media (max-width: 1023px) {
           #mobile-menu-btn {
             display: flex !important;
           }
         }
         @media (max-width: 639px) {
+          .header-actions {
+            gap: var(--space-1);
+          }
+
+          #header-add-transaction {
+            display: none;
+          }
+
           .header-btn-text {
             display: none;
+          }
+
+          .header-actions :global(.btn),
+          .header-actions :global(.chat-toggle-header) {
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            justify-content: center;
+            flex: 0 0 auto;
           }
         }
       `}</style>

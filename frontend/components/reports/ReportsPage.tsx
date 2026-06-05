@@ -2,13 +2,12 @@
 
 import { useReports } from '@/hooks/useReports'
 import { PageTransition } from '@/components/ui/PageTransition'
-import { ScrollReveal } from '@/components/ui/ScrollReveal'
 import { ReportHeader } from './components/ReportHeader'
 import { ComparisonKPIs } from './components/ComparisonKPIs'
-import { IncomeExpenseChart } from './components/IncomeExpenseChart'
-import { SpendingTrend } from './components/SpendingTrend'
-import { PeriodComparison } from './components/PeriodComparison'
-import { CashFlowStatement } from './components/CashFlowStatement'
+import { ExecutiveSummary } from './components/ExecutiveSummary'
+import { MonthlyReportView } from './components/MonthlyReportView'
+import { YearlyReportView } from './components/YearlyReportView'
+import { analyzeReport } from './reportAnalysis'
 
 export function ReportsPage() {
   const {
@@ -18,10 +17,14 @@ export function ReportsPage() {
     isLoading,
     data,
   } = useReports()
+  const analysis = analyzeReport(data)
+  const periodLabel = mode === 'month'
+    ? (() => { const [year, month] = selectedMonth.split('-'); return `${new Date(Number(year), Number(month) - 1, 1).toLocaleString('en-US', { month: 'long' })} ${year}` })()
+    : String(selectedYear)
 
   return (
     <PageTransition>
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', paddingBottom: 'var(--space-10)' }}>
+    <div className="reports-page">
       {/* Header: title + mode toggle + period nav + export */}
       <ReportHeader
         mode={mode}
@@ -32,33 +35,40 @@ export function ReportsPage() {
         setSelectedYear={setSelectedYear}
       />
 
-      {/* Row 1: 4 Comparison KPI cards with period delta */}
+      <ExecutiveSummary analysis={analysis} mode={mode} periodLabel={periodLabel} />
+
       <ComparisonKPIs
         current={data.current}
         previous={data.previous}
         isLoading={isLoading}
       />
 
-      {/* Row 2: Income vs Expense bar chart (60%) + Spending Trend area (40%) */}
-      <ScrollReveal>
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 3fr) minmax(0, 2fr)', gap: 'var(--space-5)' }}>
-        <IncomeExpenseChart data={data.chartData} mode={mode} isLoading={isLoading} />
-        <SpendingTrend data={data.trendData} mode={mode} isLoading={isLoading} />
-      </div>
-      </ScrollReveal>
-
-      {/* Row 3: Period comparison tables (expense + income side by side) */}
-      <PeriodComparison
-        expenseByCategory={data.expenseByCategory}
-        incomeByCategory={data.incomeByCategory}
-        isLoading={isLoading}
-      />
-
-      {/* Row 4: Cash Flow Statement */}
-      <ScrollReveal delay={0.1}>
-        <CashFlowStatement data={data.cashFlow} isLoading={isLoading} />
-      </ScrollReveal>
+      {mode === 'month' ? (
+        <MonthlyReportView data={data} analysis={analysis} isLoading={isLoading} />
+      ) : (
+        <YearlyReportView data={data} analysis={analysis} isLoading={isLoading} />
+      )}
     </div>
+    <style jsx>{`
+      .reports-page {
+        display: flex;
+        flex-direction: column;
+        gap: var(--space-5);
+        padding-bottom: var(--space-10);
+        min-width: 0;
+        overflow-x: hidden;
+      }
+
+      .reports-page > :global(*) {
+        min-width: 0;
+      }
+
+      @media (max-width: 900px) {
+        .reports-page {
+          gap: var(--space-4);
+        }
+      }
+    `}</style>
     </PageTransition>
   )
 }

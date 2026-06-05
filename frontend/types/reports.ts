@@ -39,6 +39,7 @@ export interface TopTransaction {
   type: string
   amount: number
   date: string
+  description: string
   categoryName: string
   categoryIcon: string
   categoryColor: string

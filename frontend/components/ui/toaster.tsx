@@ -71,7 +71,7 @@ export function Toaster({ children }: { children?: ReactNode }) {
                     display: 'flex', alignItems: 'center', gap: 4, flexShrink: 0,
                   }}
                 >
-                  <RotateCcw size={12} /> Hoàn tác
+                  <RotateCcw size={12} /> Undo
                 </button>
               )}
 

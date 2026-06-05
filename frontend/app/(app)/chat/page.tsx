@@ -9,10 +9,10 @@ import { ChatInput } from '@/components/chat/ChatInput'
 import { useChat, useSessions, useModel } from '@/hooks/useChatState'
 
 const SUGGESTIONS = [
-  { icon: BarChart3,  label: 'Tổng quan tài chính tháng này', color: 'purple' },
-  { icon: Wallet,     label: 'Ngân sách còn bao nhiêu?',      color: 'blue'   },
-  { icon: TrendingUp, label: 'Top chi tiêu lớn nhất',         color: 'green'  },
-  { icon: Target,     label: 'Tiến độ mục tiêu tiết kiệm',    color: 'gold'   },
+  { icon: BarChart3,  label: 'Financial overview this month', color: 'purple' },
+  { icon: Wallet,     label: 'How much budget is left?',      color: 'blue'   },
+  { icon: TrendingUp, label: 'Top spending items',         color: 'green'  },
+  { icon: Target,     label: 'Savings goal progress',    color: 'gold'   },
 ] as const
 
 export default function ChatPage() {
@@ -71,12 +71,12 @@ export default function ChatPage() {
             onClick={() => { setActiveSessionId(null); newSession() }}
           >
             <Plus size={15} />
-            <span>Cuộc trò chuyện mới</span>
+            <span>New conversation</span>
           </button>
         </div>
         <div className="chat-page-session-list">
           {sessions.length === 0 ? (
-            <p className="chat-page-session-empty">Chưa có cuộc trò chuyện nào.</p>
+            <p className="chat-page-session-empty">No conversations yet.</p>
           ) : (
             sessions.map(s => (
               <div
@@ -86,12 +86,12 @@ export default function ChatPage() {
               >
                 <div className="chat-page-session-info">
                   <span className="chat-page-session-title">{s.title}</span>
-                  <span className="chat-page-session-meta">{s.messageCount} tin nhắn</span>
+                  <span className="chat-page-session-meta">{s.messageCount} messages</span>
                 </div>
                 <button
                   className="chat-page-session-delete"
                   onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
-                  title="Xóa"
+                  title="Delete"
                 >
                   <Trash2 size={12} />
                 </button>
@@ -148,14 +148,14 @@ export default function ChatPage() {
                 <div style={{ width: 140, height: 140, position: 'relative', flexShrink: 0 }}>
                   <Image
                     src="/images/ai-avatar.png"
-                    alt="Chip"
+                    alt="Expensep"
                     fill
                     style={{ objectFit: 'contain' }}
                   />
                 </div>
-                <h1 className="chat-page-hero-title">Tôi có thể giúp gì?</h1>
+                <h1 className="chat-page-hero-title">How can I help?</h1>
                 <p className="chat-empty-sub" style={{ maxWidth: 340 }}>
-                  Phân tích chi tiêu, kiểm tra ngân sách, theo dõi mục tiêu và hơn thế nữa.
+                  Analyze spending, check budgets, track goals, and more.
                 </p>
               </div>
               <div className="chat-empty-suggestions chat-page-suggestions">

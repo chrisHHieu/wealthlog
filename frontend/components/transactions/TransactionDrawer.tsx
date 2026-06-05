@@ -1,197 +1,41 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight } from 'lucide-react'
-import { useAppStore } from '@/store/useAppStore'
-import { useQueryClient, useQuery } from '@tanstack/react-query'
-import { useToast } from '@/components/ui/toaster'
-import { parseShorthandAmount, formatVND, formatAmountLive, getToday } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { formatAmountLive } from '@/lib/utils'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { BankLogo } from '@/components/ui/BankLogo'
-import { useSearchParams } from 'next/navigation'
-
-interface Account {
-  id: string
-  name: string
-  icon: string
-  type: string
-}
-
-interface Category {
-  id: string
-  name: string
-  icon: string
-  color: string
-  type: string
-}
-
-type TxType = 'income' | 'expense' | 'transfer'
+import { TAB_COLORS, TxType } from './types'
+import { useTransactionDrawerForm } from './useTransactionDrawerForm'
 
 export function TransactionDrawer() {
-  const { addTransactionOpen, transactionDefaultType, editTransactionId, closeAddTransaction } = useAppStore()
-  const { toast } = useToast()
-  const qc = useQueryClient()
-  const searchParams = useSearchParams()
-
-  const [txType, setTxType] = useState<TxType>('expense')
-  const [amountRaw, setAmountRaw] = useState('')
-  const [description, setDescription] = useState('')
-  const [accountId, setAccountId] = useState('')
-  const [toAccountId, setToAccountId] = useState('')
-  const [categoryId, setCategoryId] = useState('')
-  const [date, setDate] = useState(getToday())
-  const [note, setNote] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [saveAndAdd, setSaveAndAdd] = useState(false)
-
-  const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: ['accounts'],
-    queryFn: () => fetch(`${API_URL}/api/accounts`).then(r => r.json()),
-  })
-
-  const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories'],
-    queryFn: () => fetch(`${API_URL}/api/categories`).then(r => r.json()),
-  })
-
-  // Fetch edit data if needed
-  const { data: editData } = useQuery({
-    queryKey: ['transaction', editTransactionId],
-    queryFn: () => fetch(`${API_URL}/api/transactions/${editTransactionId}`).then(r => r.json()),
-    enabled: !!editTransactionId,
-  })
-
-  function resetForm() {
-    setTxType(transactionDefaultType || 'expense')
-    setAmountRaw('')
-    setDescription('')
-    setNote('')
-    setCategoryId('')
-    setDate(getToday())
-    setToAccountId('')
-  }
-
-  // Pre-fill form when editing
-  useEffect(() => {
-    if (addTransactionOpen) {
-      if (editTransactionId && editData) {
-        setTxType(editData.type as TxType)
-        setAmountRaw(String(editData.amount))
-        setDescription(editData.description)
-        setAccountId(editData.accountId)
-        if (editData.type === 'transfer' && editData.toAccountId) {
-          setToAccountId(editData.toAccountId)
-        } else {
-          setToAccountId('')
-        }
-        setCategoryId(editData.categoryId || '')
-        setDate(editData.date.substring(0, 10))
-        setNote(editData.note || '')
-      } else if (!editTransactionId) {
-        resetForm()
-      }
-    }
-  }, [addTransactionOpen, editTransactionId, editData, transactionDefaultType])
-
-  // Set default account
-  useEffect(() => {
-    if (accounts.length > 0 && !accountId && !editTransactionId) {
-      setAccountId(accounts[0].id)
-    }
-  }, [accounts, accountId, editTransactionId])
-
-  const filteredCategories = categories.filter(
-    c => c.type === txType || c.type === 'both'
-  )
-
-  const parsedAmount = parseShorthandAmount(amountRaw) ?? 0
-  const isValid = parsedAmount > 0 && description.trim() && accountId &&
-    (txType !== 'transfer' || (toAccountId && toAccountId !== accountId))
-
-  async function handleSubmit(addMore = false) {
-    if (!isValid) return
-    setSaving(true)
-    setSaveAndAdd(addMore)
-
-    try {
-      const body = {
-        type: txType,
-        amount: parsedAmount,
-        accountId,
-        toAccountId: txType === 'transfer' ? toAccountId || undefined : undefined,
-        categoryId: categoryId || undefined,
-        description: description.trim(),
-        date,
-        note: note.trim() || undefined,
-      }
-
-      const url = editTransactionId
-        ? `${API_URL}/api/transactions/${editTransactionId}`
-        : `${API_URL}/api/transactions`
-      const method = editTransactionId ? 'PUT' : 'POST'
-
-      await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      })
-
-      await qc.invalidateQueries({ queryKey: ['transactions'] })
-      await qc.invalidateQueries({ queryKey: ['dashboard'] })
-      await qc.invalidateQueries({ queryKey: ['accounts'] })
-
-      toast(editTransactionId ? 'Đã cập nhật giao dịch' : 'Đã thêm giao dịch')
-
-      // Check budget warning for expense transactions
-      if (txType === 'expense' && categoryId) {
-        const txMonth = date.substring(0, 7)
-        try {
-          const res = await fetch(`${API_URL}/api/budgets/check?categoryId=${categoryId}&month=${txMonth}`)
-          const budgetStatus = await res.json()
-          if (budgetStatus) {
-            if (budgetStatus.isExceeded) {
-              toast(
-                `⚠️ Vượt ngân sách ${budgetStatus.categoryIcon} ${budgetStatus.categoryName}! Đã chi ${formatVND(budgetStatus.totalSpent)} / ${formatVND(budgetStatus.budgetAmount)} (${budgetStatus.percent}%)`,
-                { type: 'error', duration: 5000 }
-              )
-            } else if (budgetStatus.isWarning) {
-              toast(
-                `⚡ Sắp hết ngân sách ${budgetStatus.categoryIcon} ${budgetStatus.categoryName}: còn ${formatVND(budgetStatus.remaining)} (${budgetStatus.percent}%)`,
-                { type: 'info', duration: 4000 }
-              )
-            }
-          }
-        } catch {
-          // Silently ignore budget check errors
-        }
-      }
-
-      if (addMore) {
-        // Reset form except type
-        setAmountRaw('')
-        setDescription('')
-        setNote('')
-        setDate(getToday())
-        setCategoryId('')
-      } else {
-        closeAddTransaction()
-      }
-    } finally {
-      setSaving(false)
-      setSaveAndAdd(false)
-    }
-  }
-
-
-  const TAB_COLORS: Record<TxType, string> = {
-    income: 'var(--accent-green)',
-    expense: 'var(--accent-red)',
-    transfer: 'var(--accent-blue)',
-  }
+  const {
+    accounts,
+    addTransactionOpen,
+    amountRaw,
+    categoryId,
+    closeAddTransaction,
+    date,
+    description,
+    editTransactionId,
+    filteredCategories,
+    handleSubmit,
+    isValid,
+    accountId,
+    saveAndAdd,
+    saving,
+    setAccountId,
+    setAmountRaw,
+    setCategoryId,
+    setDate,
+    setDescription,
+    setToAccountId,
+    setTxType,
+    toAccountId,
+    txType,
+  } = useTransactionDrawerForm()
 
   return (
     <AnimatePresence>
@@ -222,7 +66,7 @@ export function TransactionDrawer() {
               flexShrink: 0,
             }}>
               <h2 style={{ fontSize: 17, fontWeight: 600 }}>
-                {editTransactionId ? 'Sửa giao dịch' : 'Thêm giao dịch'}
+                {editTransactionId ? 'Edit transaction' : 'Add transaction'}
               </h2>
               <button
                 onClick={closeAddTransaction}
@@ -252,11 +96,11 @@ export function TransactionDrawer() {
                     }}
                   >
                     {t === 'expense' ? (
-                      <><ArrowDownCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Chi</>
+                      <><ArrowDownCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Expense</>
                     ) : t === 'income' ? (
-                      <><ArrowUpCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Thu</>
+                      <><ArrowUpCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Income</>
                     ) : (
-                      <><ArrowLeftRight size={14} style={{ display: 'inline', marginRight: 4 }} />Chuyển</>
+                      <><ArrowLeftRight size={14} style={{ display: 'inline', marginRight: 4 }} />Transfer</>
                     )}
                   </button>
                 ))}
@@ -268,7 +112,7 @@ export function TransactionDrawer() {
               {/* Amount */}
               <div style={{ textAlign: 'center', marginBottom: 28 }}>
                 <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                  Số tiền
+                  Amount
                 </div>
                 <AmountInput
                   value={amountRaw}
@@ -281,20 +125,20 @@ export function TransactionDrawer() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 {/* Description */}
                 <div>
-                  <label className="label" htmlFor="tx-description">Mô tả</label>
+                  <label className="label" htmlFor="tx-description">Description</label>
                   <input
                     id="tx-description"
                     type="text"
                     value={description}
                     onChange={e => setDescription(e.target.value)}
-                    placeholder="VD: Ăn trưa với đồng nghiệp"
+                    placeholder="Example: Lunch with colleagues"
                     className="input"
                   />
                 </div>
 
                 {/* Account */}
                 <div>
-                  <label className="label" htmlFor="tx-account">Tài khoản</label>
+                  <label className="label" htmlFor="tx-account">Accounts</label>
                   <Select
                     value={accountId}
                     onChange={setAccountId}
@@ -305,13 +149,13 @@ export function TransactionDrawer() {
                 {/* To Account (for transfer) */}
                 {txType === 'transfer' && (
                   <div>
-                    <label className="label" htmlFor="tx-to-account">Tài khoản đích</label>
+                    <label className="label" htmlFor="tx-to-account">Destination account</label>
                     <Select
                       value={toAccountId}
                       onChange={setToAccountId}
-                      placeholder="Chọn tài khoản..."
+                      placeholder="Select account..."
                       options={[
-                        { value: '', label: 'Chọn tài khoản...' },
+                        { value: '', label: 'Select account...' },
                         ...accounts.filter(a => a.id !== accountId).map(a => ({ value: a.id, label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><BankLogo iconStr={a.icon} color="var(--text-primary)" size={20} /> {a.name}</span> }))
                       ]}
                     />
@@ -321,8 +165,8 @@ export function TransactionDrawer() {
                 {/* Category */}
                 {txType !== 'transfer' && (
                   <div>
-                    <label className="label">Danh mục</label>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                    <label className="label">Category</label>
+                    <div className="drawer-option-grid four">
                       {filteredCategories.map(cat => (
                         <button
                           key={cat.id}
@@ -357,7 +201,7 @@ export function TransactionDrawer() {
 
                 {/* Date */}
                 <div style={{ zIndex: 11 }}>
-                  <label className="label" htmlFor="tx-date">Ngày</label>
+                  <label className="label" htmlFor="tx-date">Date</label>
                   <DatePicker
                     value={date}
                     onChange={setDate}
@@ -375,7 +219,7 @@ export function TransactionDrawer() {
                 disabled={!isValid || saving}
                 style={{ flex: 'none' }}
               >
-                Lưu & thêm tiếp
+                Save & add another
               </button>
               <button
                 id="tx-save-btn"
@@ -384,9 +228,33 @@ export function TransactionDrawer() {
                 disabled={!isValid || saving}
                 style={{ flex: 1 }}
               >
-                {saving && !saveAndAdd ? 'Đang lưu...' : 'Lưu giao dịch'}
+                {saving && !saveAndAdd ? 'Saving...' : 'Save transactions'}
               </button>
             </div>
+            <style jsx>{`
+              .drawer-option-grid {
+                display: grid;
+                gap: 8px;
+              }
+
+              .drawer-option-grid.four {
+                grid-template-columns: repeat(4, minmax(0, 1fr));
+              }
+
+              @media (max-width: 480px) {
+                .drawer-option-grid.four {
+                  grid-template-columns: repeat(2, minmax(0, 1fr));
+                }
+
+                :global(.drawer-footer) {
+                  flex-direction: column-reverse;
+                }
+
+                :global(.drawer-footer .btn) {
+                  width: 100%;
+                }
+              }
+            `}</style>
           </motion.div>
         </>
       )}

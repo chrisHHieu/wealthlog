@@ -7,7 +7,7 @@ import { X, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/toaster'
 import { parseShorthandAmount, formatAmountLive, getToday } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiGet, apiJson, queryKeys } from '@/lib/api'
 import { Select } from '@/components/ui/Select'
 import { AmountInput } from '@/components/ui/AmountInput'
 import { BankLogo } from '@/components/ui/BankLogo'
@@ -16,18 +16,45 @@ interface Account { id: string; name: string; icon: string; type: string }
 interface Category { id: string; name: string; icon: string; color: string; type: string }
 type TxType = 'income' | 'expense' | 'transfer'
 
+interface RecurringItem {
+  id: string
+  type: string
+  amount: number
+  accountId?: string
+  toAccountId?: string
+  categoryId?: string
+  description?: string
+  frequency?: string
+  daysOfWeek?: number[] | string | null
+  startDate?: string
+}
+
+interface RecurringPayload {
+  type: TxType
+  amount: number
+  accountId: string
+  toAccountId: string | null
+  categoryId: string | null
+  description: string
+  frequency: string
+  daysOfWeek: number[] | null
+  startDate: string
+  isActive: boolean
+  nextRunDate?: string
+}
+
 interface RecurringDrawerProps {
-  item: any | null
+  item: RecurringItem | null
   onClose: () => void
   onSaved: () => void
 }
 
 const FREQ_OPTIONS = [
-  { value: 'daily', label: 'Hàng ngày' },
-  { value: 'weekdays', label: 'Ngày trong tuần' },
-  { value: 'weekly', label: 'Hàng tuần' },
-  { value: 'monthly', label: 'Hàng tháng' },
-  { value: 'yearly', label: 'Hàng năm' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekdays', label: 'Weekdays' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
 ]
 
 // 0=CN, 1=T2, 2=T3, 3=T4, 4=T5, 5=T6, 6=T7
@@ -69,25 +96,25 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
   const [toAccountId, setToAccountId] = useState('')
   const [categoryId, setCategoryId] = useState('')
   const [frequency, setFrequency] = useState('monthly')
-  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4]) // default Mon-Thu
+  const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4]) // default Mon-Income
   const [startDate, setStartDate] = useState(getToday())
   const [saving, setSaving] = useState(false)
 
   const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: ['accounts'],
-    queryFn: () => fetch(`${API_URL}/api/accounts`).then(r => r.json()),
+    queryKey: queryKeys.accounts,
+    queryFn: () => apiGet<Account[]>('/api/accounts'),
   })
 
   const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories'],
-    queryFn: () => fetch(`${API_URL}/api/categories`).then(r => r.json()),
+    queryKey: queryKeys.categories(),
+    queryFn: () => apiGet<Category[]>('/api/categories'),
   })
 
   useEffect(() => {
     if (item) {
-      setTxType(item.type)
+      setTxType(item.type as TxType)
       setAmountRaw(String(item.amount))
-      setDescription(item.description)
+      setDescription(item.description ?? '')
       setAccountId(item.accountId || '')
       setToAccountId(item.toAccountId || '')
       setCategoryId(item.categoryId || '')
@@ -124,7 +151,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
     setSaving(true)
     try {
       const isWeekdays = frequency === 'weekdays'
-      const body: Record<string, any> = {
+      const body: RecurringPayload = {
         type: txType,
         amount: parsedAmount,
         accountId,
@@ -150,21 +177,17 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
         body.nextRunDate = isWeekdays ? firstAllowedDay(startDate, selectedDays) : startDate
       }
 
-      const url = item ? `${API_URL}/api/recurring/${item.id}` : `${API_URL}/api/recurring`
       const method = item ? 'PUT' : 'POST'
 
-      const res = await fetch(url, {
+      await apiJson(item ? `/api/recurring/${item.id}` : '/api/recurring', {
         method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body,
       })
 
-      if (!res.ok) throw new Error('Lỗi lưu dữ liệu')
-
-      toast(item ? 'Đã cập nhật lịch định kỳ' : 'Đã tạo giao dịch định kỳ')
+      toast(item ? 'Recurring schedule updated' : 'Recurring transaction created')
       onSaved()
     } catch {
-      toast('Lỗi lưu dữ liệu. Thử lại nhé.')
+      toast('Unable to save. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -201,7 +224,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
             flexShrink: 0,
           }}>
             <h2 style={{ fontSize: 17, fontWeight: 600 }}>
-              {item ? 'Sửa định kỳ' : 'Tạo giao dịch định kỳ'}
+              {item ? 'Edit recurring schedule' : 'Create recurring transaction'}
             </h2>
             <button
               onClick={onClose}
@@ -230,11 +253,11 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
                   }}
                 >
                   {t === 'expense' ? (
-                    <><ArrowDownCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Chi</>
+                    <><ArrowDownCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Expense</>
                   ) : t === 'income' ? (
-                    <><ArrowUpCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Thu</>
+                    <><ArrowUpCircle size={14} style={{ display: 'inline', marginRight: 4 }} />Income</>
                   ) : (
-                    <><ArrowLeftRight size={14} style={{ display: 'inline', marginRight: 4 }} />Chuyển</>
+                    <><ArrowLeftRight size={14} style={{ display: 'inline', marginRight: 4 }} />Transfer</>
                   )}
                 </button>
               ))}
@@ -246,7 +269,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
             {/* Amount */}
             <div style={{ textAlign: 'center', marginBottom: 28 }}>
               <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
-                Số tiền
+                Amount
               </div>
               <AmountInput
                 value={amountRaw}
@@ -259,20 +282,20 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {/* Description */}
               <div>
-                <label className="label">Tên / Mô tả</label>
+                <label className="label">Name / Description</label>
                 <input
                   type="text"
                   className="input"
                   value={description}
                   onChange={e => setDescription(e.target.value)}
-                  placeholder="VD: Tiền nhà, Netflix, Lương..."
+                  placeholder="Example: Rent, Netflix, Salary..."
                 />
               </div>
 
               {/* Frequency & Start Date */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+              <div className="drawer-field-grid">
                 <div>
-                  <label className="label">Chu kỳ lặp</label>
+                  <label className="label">Repeat frequency</label>
                   <Select
                     value={frequency}
                     onChange={setFrequency}
@@ -280,7 +303,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
                   />
                 </div>
                 <div>
-                  <label className="label">Bắt đầu từ ngày</label>
+                  <label className="label">Start date</label>
                   <input
                     type="date"
                     className="input"
@@ -293,7 +316,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
               {/* Day picker — only shown for weekdays mode */}
               {frequency === 'weekdays' && (
                 <div>
-                  <label className="label">Chọn ngày trong tuần</label>
+                  <label className="label">Select weekdays</label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                     {DAYS_VI.map(day => {
                       const active = selectedDays.includes(day.value)
@@ -323,18 +346,18 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
                   </div>
                   {selectedDays.length === 0 && (
                     <div style={{ fontSize: 11, color: 'var(--accent-red)', marginTop: 6 }}>
-                      Chọn ít nhất 1 ngày
+                      Select at least 1 day
                     </div>
                   )}
                   <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 6 }}>
-                    Sẽ tạo {selectedDays.length} giao dịch/tuần
+                    Will create {selectedDays.length} transactions/week
                   </div>
                 </div>
               )}
 
               {/* Account */}
               <div>
-                <label className="label">Tài khoản</label>
+                <label className="label">Accounts</label>
                 <Select
                   value={accountId}
                   onChange={setAccountId}
@@ -350,13 +373,13 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
               {/* To account (transfer only) */}
               {txType === 'transfer' && (
                 <div>
-                  <label className="label">Tài khoản đích</label>
+                  <label className="label">Destination account</label>
                   <Select
                     value={toAccountId}
                     onChange={setToAccountId}
-                    placeholder="Chọn tài khoản..."
+                    placeholder="Select account..."
                     options={[
-                      { value: '', label: 'Chọn tài khoản...' },
+                      { value: '', label: 'Select account...' },
                       ...accounts.filter(a => a.id !== accountId).map(a => ({
                         value: a.id,
                         label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -371,8 +394,8 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
               {/* Category */}
               {txType !== 'transfer' && (
                 <div>
-                  <label className="label">Danh mục</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+                  <label className="label">Category</label>
+                  <div className="drawer-option-grid four">
                     {filteredCategories.map(cat => (
                       <button
                         key={cat.id}
@@ -408,9 +431,32 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
               disabled={!isValid || saving}
               style={{ flex: 1 }}
             >
-              {saving ? 'Đang lưu...' : item ? 'Cập nhật' : 'Tạo lịch định kỳ'}
+              {saving ? 'Saving...' : item ? 'Update' : 'Create schedule'}
             </button>
           </div>
+          <style jsx>{`
+            .drawer-field-grid {
+              display: grid;
+              grid-template-columns: repeat(2, minmax(0, 1fr));
+              gap: 12px;
+            }
+
+            .drawer-option-grid {
+              display: grid;
+              gap: 8px;
+            }
+
+            .drawer-option-grid.four {
+              grid-template-columns: repeat(4, minmax(0, 1fr));
+            }
+
+            @media (max-width: 480px) {
+              .drawer-field-grid,
+              .drawer-option-grid.four {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+              }
+            }
+          `}</style>
         </motion.div>
       </>
     </AnimatePresence>,

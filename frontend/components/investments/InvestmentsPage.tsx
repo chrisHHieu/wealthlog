@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, TrendingUp, TrendingDown, Edit2, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { formatVND, formatVNDCompact, formatDateVI, parseShorthandAmount, formatAmountLive, getToday } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
@@ -26,13 +26,13 @@ interface Investment {
 }
 
 const INVESTMENT_TYPE_LABELS: Record<string, string> = {
-  stock: '📊 Cổ phiếu',
-  etf: '📈 ETF/Quỹ',
-  gold: '🥇 Vàng',
-  realestate: '🏠 Bất động sản',
-  savings: '🏦 Tiết kiệm',
+  stock: '📊 Stocks',
+  etf: '📈 ETF/Fund',
+  gold: '🥇 Gold',
+  realestate: '🏠 Real estate',
+  savings: '🏦 Savings',
   crypto: '₿ Crypto',
-  other: '💼 Khác',
+  other: '💼 Other',
 }
 
 const INVESTMENT_TYPES = Object.entries(INVESTMENT_TYPE_LABELS)
@@ -57,8 +57,8 @@ export function InvestmentsPage() {
   const [saving, setSaving] = useState(false)
 
   const { data: investments = [] } = useQuery<Investment[]>({
-    queryKey: ['investments'],
-    queryFn: () => fetch(`${API_URL}/api/investments`).then(r => r.json()),
+    queryKey: queryKeys.investments,
+    queryFn: () => apiGet<Investment[]>('/api/investments'),
   })
 
   const totalValue = investments.reduce((s, inv) => s + inv.currentPrice * inv.quantity, 0)
@@ -110,22 +110,20 @@ export function InvestmentsPage() {
       }
 
       if (editInv) {
-        await fetch(`${API_URL}/api/investments/${editInv.id}`, {
+        await apiJson(`/api/investments/${editInv.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
         })
-        toast('Đã cập nhật tài sản')
+        toast('Asset updated')
       } else {
-        await fetch(`${API_URL}/api/investments`, {
+        await apiJson('/api/investments', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
         })
-        toast('Đã thêm tài sản đầu tư')
+        toast('Investment asset added')
       }
 
-      await qc.invalidateQueries({ queryKey: ['investments'] })
+      await qc.invalidateQueries({ queryKey: queryKeys.investments })
       setShowForm(false)
     } finally {
       setSaving(false)
@@ -133,10 +131,10 @@ export function InvestmentsPage() {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`${API_URL}/api/investments/${id}`, { method: 'DELETE' })
-    await qc.invalidateQueries({ queryKey: ['investments'] })
+    await apiDelete(`/api/investments/${id}`)
+    await qc.invalidateQueries({ queryKey: queryKeys.investments })
     setDeleteConfirm(null)
-    toast('Đã xóa tài sản')
+    toast('Asset deleted')
   }
 
   return (
@@ -144,25 +142,25 @@ export function InvestmentsPage() {
     <div>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Đầu tư</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{investments.length} tài sản đầu tư</p>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Investment</h1>
+          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{investments.length} investment assets</p>
         </div>
         <button id="add-investment-btn" onClick={openAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={15} /> Thêm tài sản
+          <Plus size={15} /> Add asset
         </button>
       </div>
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginBottom: 24 }}>
+      <div className="investment-summary-grid">
         <div className="kpi-card" style={{ background: 'linear-gradient(135deg, rgba(0,200,150,0.08), transparent)', borderColor: 'rgba(0,200,150,0.2)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Tổng giá trị hiện tại</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total current value</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-green)' }}>{formatVNDCompact(totalValue)}</div>
         </div>
         <div className="kpi-card" style={{
           background: `linear-gradient(135deg, ${totalProfit >= 0 ? 'rgba(0,200,150,0.08)' : 'rgba(255,77,109,0.08)'}, transparent)`,
           borderColor: totalProfit >= 0 ? 'rgba(0,200,150,0.2)' : 'rgba(255,77,109,0.2)',
         }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Lãi/Lỗ tổng</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total gain/loss</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             {totalProfit >= 0 ? <TrendingUp size={18} style={{ color: 'var(--accent-green)' }} /> : <TrendingDown size={18} style={{ color: 'var(--accent-red)' }} />}
             <div style={{ fontSize: 22, fontWeight: 700, color: totalProfit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
@@ -174,7 +172,7 @@ export function InvestmentsPage() {
           </div>
         </div>
         <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Vốn đầu tư</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Invested capital</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{formatVNDCompact(totalCost)}</div>
         </div>
       </div>
@@ -182,22 +180,23 @@ export function InvestmentsPage() {
       {investments.length === 0 ? (
         <div className="empty-state card" style={{ padding: '60px 24px' }}>
           <span style={{ fontSize: 56 }}>📈</span>
-          <p style={{ fontSize: 16, fontWeight: 600 }}>Chưa có tài sản đầu tư nào</p>
-          <p style={{ fontSize: 13 }}>Thêm cổ phiếu, vàng, ETF... để theo dõi danh mục đầu tư</p>
-          <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 12 }}><Plus size={15} /> Thêm tài sản đầu tư</button>
+          <p style={{ fontSize: 16, fontWeight: 600 }}>No investment assets yet</p>
+          <p style={{ fontSize: 13 }}>Add stocks, gold, ETFs, and other assets to track your portfolio</p>
+          <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 12 }}><Plus size={15} /> Add investment asset</button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: 20 }}>
+        <div className="investment-content-grid">
           {/* Table */}
           <div className="card" style={{ overflow: 'hidden', padding: 0 }}>
+            <div className="investment-table-scroll">
             <table className="table">
               <thead>
                 <tr>
-                  <th>Tài sản</th>
-                  <th>Số lượng</th>
-                  <th>Giá mua → Hiện tại</th>
-                  <th>Tổng hiện tại</th>
-                  <th>Lãi/Lỗ</th>
+                  <th>Asset</th>
+                  <th>Quantity</th>
+                  <th>Buy price / Current</th>
+                  <th>Current total</th>
+                  <th>Gain/Loss</th>
                   <th>ROI</th>
                   <th></th>
                 </tr>
@@ -245,11 +244,12 @@ export function InvestmentsPage() {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
 
           {/* Allocation Pie */}
           <div className="card" style={{ padding: '20px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Phân bổ danh mục</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Portfolio allocation</div>
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
                 <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
@@ -279,13 +279,13 @@ export function InvestmentsPage() {
             <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} />
             <motion.div className="drawer" style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 style={{ fontSize: 17, fontWeight: 600 }}>{editInv ? 'Sửa tài sản' : 'Thêm tài sản đầu tư'}</h2>
+                <h2 style={{ fontSize: 17, fontWeight: 600 }}>{editInv ? 'Edit asset' : 'Add investment asset'}</h2>
                 <button onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }}>✕</button>
               </div>
 
               <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ zIndex: 10 }}>
-                  <label className="label">Loại tài sản</label>
+                  <label className="label">Asset type</label>
                   <Select
                     value={formType}
                     onChange={setFormType}
@@ -293,43 +293,43 @@ export function InvestmentsPage() {
                   />
                 </div>
                 <div>
-                  <label className="label">Tên tài sản</label>
-                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="VD: FPT Corporation" className="input" />
+                  <label className="label">Asset name</label>
+                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="Example: FPT Corporation" className="input" />
                 </div>
                 <div>
-                  <label className="label">Mã chứng khoán (tuỳ chọn)</label>
-                  <input type="text" value={formSymbol} onChange={e => setFormSymbol(e.target.value)} placeholder="VD: FPT" className="input" />
+                  <label className="label">Ticker (optional)</label>
+                  <input type="text" value={formSymbol} onChange={e => setFormSymbol(e.target.value)} placeholder="Example: FPT" className="input" />
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label className="label">Số lượng</label>
+                    <label className="label">Quantity</label>
                     <input type="number" value={formQty} onChange={e => setFormQty(e.target.value)} className="input" />
                   </div>
                   <div style={{ zIndex: 9 }}>
-                    <label className="label">Ngày mua</label>
+                    <label className="label">Date mua</label>
                     <DatePicker value={formBuyDate} onChange={setFormBuyDate} disableFuture={true} />
                   </div>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
                   <div>
-                    <label className="label">Giá mua (đ)</label>
+                    <label className="label">Buy price (VND)</label>
                     <input type="text" value={formBuyPrice} onChange={e => setFormBuyPrice(formatAmountLive(e.target.value))} placeholder="0" className="input" />
                   </div>
                   <div>
-                    <label className="label">Giá hiện tại (đ)</label>
+                    <label className="label">Current price (VND)</label>
                     <input type="text" value={formCurrentPrice} onChange={e => setFormCurrentPrice(formatAmountLive(e.target.value))} placeholder="0" className="input" />
                   </div>
                 </div>
                 <div>
-                  <label className="label">Ghi chú</label>
+                  <label className="label">Note</label>
                   <textarea value={formNote} onChange={e => setFormNote(e.target.value)} className="input" rows={2} style={{ resize: 'vertical' }} />
                 </div>
               </div>
 
               <div className="drawer-footer">
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowForm(false)}>Hủy</button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowForm(false)}>Cancel</button>
                 <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleSave} disabled={saving || !formName.trim() || !formBuyPrice || !formCurrentPrice}>
-                  {saving ? 'Đang lưu...' : editInv ? 'Cập nhật' : 'Thêm tài sản'}
+                  {saving ? 'Saving...' : editInv ? 'Update' : 'Add asset'}
                 </button>
               </div>
             </motion.div>
@@ -346,17 +346,43 @@ export function InvestmentsPage() {
             <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDeleteConfirm(null)} />
             <motion.div className="modal" style={{ padding: '28px', textAlign: 'center' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
               <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Xóa tài sản đầu tư?</h3>
-              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>Hành động này không thể hoàn tác.</p>
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Delete investment assets?</h3>
+              <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This action cannot be undone.</p>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setDeleteConfirm(null)}>Hủy</button>
-                <button className="btn btn-danger" style={{ flex: 1 }} onClick={() => handleDelete(deleteConfirm)}>Xóa</button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setDeleteConfirm(null)}>Cancel</button>
+                <button className="btn btn-danger" style={{ flex: 1 }} onClick={() => handleDelete(deleteConfirm)}>Delete</button>
               </div>
             </motion.div>
           </>
         )}
       </AnimatePresence>
       </Portal>
+      <style jsx>{`
+        .investment-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-bottom: 24px;
+        }
+
+        .investment-content-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+          gap: 20px;
+          align-items: start;
+        }
+
+        .investment-table-scroll {
+          overflow-x: auto;
+          scrollbar-width: thin;
+        }
+
+        @media (max-width: 1180px) {
+          .investment-content-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
     </PageTransition>
   )

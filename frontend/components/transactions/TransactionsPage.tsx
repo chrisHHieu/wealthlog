@@ -46,20 +46,20 @@ export function TransactionsPage() {
 
   return (
     <PageTransition>
-      <div style={{ display: 'flex', gap: 'var(--space-6)' }}>
+      <div className="transactions-shell">
         {/* Main content */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ marginBottom: 'var(--space-5)' }}>
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>Giao dịch</h1>
+            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>Transactions</h1>
             <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)', flexWrap: 'wrap' }}>
-              <span>{total} giao dịch</span>
+              <span>{total} transactions</span>
               <span style={{ color: 'var(--text-tertiary)' }}>|</span>
               <span style={{ color: 'var(--accent-green)', fontWeight: 600 }}>+{formatVND(totalIncome)}</span>
-              <span style={{ color: 'var(--text-tertiary)' }}>thu</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>income</span>
               <span style={{ color: 'var(--text-tertiary)' }}>·</span>
               <span style={{ color: 'var(--accent-red)', fontWeight: 600 }}>-{formatVND(totalExpense)}</span>
-              <span style={{ color: 'var(--text-tertiary)' }}>chi</span>
-              <span style={{ color: 'var(--text-tertiary)' }}>(trang {page}/{totalPages})</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>expense</span>
+              <span style={{ color: 'var(--text-tertiary)' }}>(page {page}/{totalPages})</span>
             </div>
           </div>
 
@@ -92,10 +92,27 @@ export function TransactionsPage() {
           isOpen={!!deleteId}
           onClose={() => setDeleteId(null)}
           onConfirm={confirmDelete}
-          title="Xóa giao dịch?"
-          description="Hành động này có thể được hoàn tác trong vòng 3 giây."
+          title="Delete transactions?"
+          description="This action can be undone within 3 seconds."
         />
       </div>
+      <style jsx>{`
+        .transactions-shell {
+          display: flex;
+          gap: var(--space-6);
+          align-items: flex-start;
+        }
+
+        @media (max-width: 1180px) {
+          .transactions-shell {
+            flex-direction: column;
+          }
+
+          .transactions-shell > :global(*) {
+            width: 100%;
+          }
+        }
+      `}</style>
     </PageTransition>
   )
 }

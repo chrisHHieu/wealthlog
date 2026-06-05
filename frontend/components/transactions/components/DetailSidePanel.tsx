@@ -18,14 +18,11 @@ export function DetailSidePanel({ transaction, onClose, onEdit, onDelete }: Deta
           initial={{ opacity: 0, x: 40 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
-          style={{
-            width: 300, flexShrink: 0, position: 'sticky',
-            top: 88, alignSelf: 'flex-start',
-          }}
+          className="transaction-detail-panel"
         >
           <div className="card" style={{ padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <span style={{ fontWeight: 600, fontSize: 15 }}>Chi tiết</span>
+              <span style={{ fontWeight: 600, fontSize: 15 }}>Details</span>
               <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }}>✕</button>
             </div>
 
@@ -39,11 +36,11 @@ export function DetailSidePanel({ transaction, onClose, onEdit, onDelete }: Deta
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Loại', value: transaction.type === 'income' ? '💹 Thu nhập' : transaction.type === 'expense' ? '💸 Chi tiêu' : '🔄 Chuyển khoản' },
-                { label: 'Ngày', value: formatDateVI(transaction.date) },
-                { label: 'Danh mục', value: transaction.categoryName ?? 'Không phân loại' },
-                { label: 'Tài khoản', value: `${transaction.accountIcon ?? ''} ${transaction.accountName ?? 'N/A'}` },
-                ...(transaction.note ? [{ label: 'Ghi chú', value: transaction.note }] : []),
+                { label: 'Type', value: transaction.type === 'income' ? '💹 Income' : transaction.type === 'expense' ? '💸 Expense' : '🔄 Transfer' },
+                { label: 'Date', value: formatDateVI(transaction.date) },
+                { label: 'Category', value: transaction.categoryName ?? 'Uncategorized' },
+                { label: 'Accounts', value: `${transaction.accountIcon ?? ''} ${transaction.accountName ?? 'N/A'}` },
+                ...(transaction.note ? [{ label: 'Note', value: transaction.note }] : []),
               ].map(row => (
                 <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
                   <span style={{ color: 'var(--text-tertiary)' }}>{row.label}</span>
@@ -57,16 +54,32 @@ export function DetailSidePanel({ transaction, onClose, onEdit, onDelete }: Deta
                 className="btn btn-secondary" style={{ flex: 1 }}
                 onClick={() => { onEdit(transaction.id); onClose() }}
               >
-                <Edit2 size={14} /> Sửa
+                <Edit2 size={14} /> Edit
               </button>
               <button
                 className="btn btn-danger" style={{ flex: 1 }}
                 onClick={() => onDelete(transaction.id)}
               >
-                <Trash2 size={14} /> Xóa
+                <Trash2 size={14} /> Delete
               </button>
             </div>
           </div>
+          <style jsx>{`
+            .transaction-detail-panel {
+              width: 300px;
+              flex-shrink: 0;
+              position: sticky;
+              top: 88px;
+              align-self: flex-start;
+            }
+
+            @media (max-width: 1180px) {
+              .transaction-detail-panel {
+                width: 100%;
+                position: static;
+              }
+            }
+          `}</style>
         </motion.div>
       )}
     </AnimatePresence>

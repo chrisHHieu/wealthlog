@@ -16,12 +16,12 @@ token budget for tool results and reasoning.
 
 from datetime import datetime, timedelta, timezone
 
+from app.ai.mcp.server import mcp
+from app.ai.mcp.tools.discovery import build_schema_summary
 from app.ai.memory.commitments import build_commitments_prompt
 from app.ai.memory.episodic import _extract_query_topics, build_summaries_prompt
 from app.ai.memory.facts import build_facts_prompt
 from app.ai.memory.synthesis import get_latest_user_model
-from app.ai.mcp.server import mcp
-from app.ai.mcp.tools.discovery import build_schema_summary
 from app.logging_config import get_logger
 
 logger = get_logger(__name__)
@@ -41,6 +41,10 @@ _SYSTEM_BASE = (
     "- Default currency: VND. Number format: use commas (e.g., 1,000,000).\n"
     "- Month format: YYYY-MM. Date format: YYYY-MM-DD.\n"
     "- Keep answers concise, clear, with insight.\n"
+    "- Date authority: The current-time line in the dynamic block is the SOLE source "
+    "of truth for today's date. Always resolve relative references against that "
+    "timestamp — never infer "
+    "the current date from conversation history, session summaries, or tool results.\n"
     "- For overview questions, call multiple tools to build a complete picture.\n"
     "- Give specific advice when appropriate.\n"
     "Creating transactions:\n"
@@ -161,23 +165,35 @@ async def build_system_blocks(latest_user_message: str | None = None) -> list[di
     facts_limit = 50 if has_model else 50
     summaries_limit = 3 if has_model else None  # None → use config default
 
-    dynamic_parts = [f"Thời gian hiện tại: {_now_vn()}"]
+    dynamic_parts = [f"Current time: {_now_vn()}"]
 
-    commitments_block = await build_commitments_prompt()
+    try:
+        commitments_block = await build_commitments_prompt()
+    except Exception:
+        logger.warning("Failed to load pending commitments")
+        commitments_block = ""
     if commitments_block:
         dynamic_parts.append(f"\n---\n{commitments_block}")
 
     query_topics = (
         _extract_query_topics(latest_user_message) if latest_user_message else None
     )
-    summaries_block = await build_summaries_prompt(
-        query_topics=query_topics,
-        limit=summaries_limit,
-    )
+    try:
+        summaries_block = await build_summaries_prompt(
+            query_topics=query_topics,
+            limit=summaries_limit,
+        )
+    except Exception:
+        logger.warning("Failed to load session summaries")
+        summaries_block = ""
     if summaries_block:
         dynamic_parts.append(f"\n---\n{summaries_block}")
 
-    facts_block = await build_facts_prompt(limit=facts_limit, query_topics=query_topics)
+    try:
+        facts_block = await build_facts_prompt(limit=facts_limit, query_topics=query_topics)
+    except Exception:
+        logger.warning("Failed to load user facts")
+        facts_block = ""
     if facts_block:
         dynamic_parts.append(f"\n---\n{facts_block}")
 
@@ -185,9 +201,13 @@ async def build_system_blocks(latest_user_message: str | None = None) -> list[di
         from app.ai.digest import get_latest_digest  # lazy — avoids circular import
         digest_row = await get_latest_digest()
         if digest_row:
+            vn_tz = timezone(timedelta(hours=7))
+            digest_age_days = (
+                datetime.now(vn_tz) - digest_row.created_at.astimezone(vn_tz)
+            ).days
             dynamic_parts.append(
                 f"\n---\n[Có báo cáo tài chính tháng {digest_row.generated_for_month} "
-                f"(tổng hợp {(datetime.now(timezone(timedelta(hours=7))) - digest_row.created_at.astimezone(timezone(timedelta(hours=7)))).days}d trước). "
+                f"(tổng hợp {digest_age_days}d trước). "
                 f"Gọi get_monthly_digest() để đọc khi user hỏi về tình hình tài chính tháng này.]"
             )
     except Exception:

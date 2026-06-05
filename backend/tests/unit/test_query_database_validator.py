@@ -8,7 +8,6 @@ no longer poison the validator.
 
 from app.ai.mcp.tools.discovery import _is_read_only
 
-
 # ── Legit SELECTs (must pass) ──────────────────────────────────────────────
 
 

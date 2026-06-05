@@ -4,14 +4,14 @@ import './globals.css'
 import { Providers } from './providers'
 
 const jakarta = Plus_Jakarta_Sans({
-  variable: '--font-inter', /* Keeping the variable name same to avoid changing css everywhere */
+  variable: '--font-inter',
   subsets: ['latin'],
 })
 
 export const metadata: Metadata = {
-  title: 'WealthLog — Quản lý tài chính cá nhân',
-  description: 'Ứng dụng quản lý tài chính cá nhân phong cách Luxury Fintech. Theo dõi chi tiêu, ngân sách, mục tiêu và đầu tư của bạn.',
-  keywords: ['quản lý tài chính', 'chi tiêu', 'tiết kiệm', 'đầu tư', 'ngân sách'],
+  title: 'WealthLog - Personal Finance Manager',
+  description: 'A personal finance app for tracking spending, budgets, goals, and investments.',
+  keywords: ['personal finance', 'spending', 'saving', 'investing', 'budget'],
 }
 
 export default function RootLayout({
@@ -20,7 +20,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="vi" suppressHydrationWarning data-scroll-behavior="smooth">
+    <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
       <body className={`${jakarta.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>

@@ -52,9 +52,9 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
 
   return (
     <div className="card" style={{ padding: 20 }}>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Báo cáo dòng tiền</div>
+      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Cash flow statement</div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
-        Tổng quan thu nhập - chi tiêu theo danh mục
+        Income and expense overview by category
       </div>
 
       {/* Income section */}
@@ -65,7 +65,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
           borderBottom: '1px solid var(--surface-border)',
         }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-green)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Thu nhập
+            Income
           </span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-green)' }}>
             +{formatVNDCompact(data.totalIncome)}
@@ -76,7 +76,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
         ))}
         {data.incomeItems.length === 0 && (
           <div style={{ padding: '12px 0', fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
-            Chưa có thu nhập
+            No income yet
           </div>
         )}
       </div>
@@ -89,7 +89,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
           borderBottom: '1px solid var(--surface-border)',
         }}>
           <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent-red)', textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Chi tiêu
+            Expense
           </span>
           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--accent-red)' }}>
             -{formatVNDCompact(data.totalExpense)}
@@ -100,7 +100,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
         ))}
         {data.expenseItems.length === 0 && (
           <div style={{ padding: '12px 0', fontSize: 12, color: 'var(--text-tertiary)', textAlign: 'center' }}>
-            Chưa có chi tiêu
+            No expenses yet
           </div>
         )}
       </div>
@@ -113,7 +113,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
         border: `1px solid ${netColor}30`,
       }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
-          Dòng tiền ròng
+          Net cash flow
         </span>
         <span style={{ fontSize: 18, fontWeight: 800, color: netColor, fontVariantNumeric: 'tabular-nums' }}>
           {data.net >= 0 ? '+' : ''}{formatVND(data.net)}

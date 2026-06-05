@@ -19,9 +19,9 @@ export function RecentTransactions({ data, isLoading }: RecentTransactionsProps)
   return (
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>Giao dịch gần đây</div>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>Recent transactions</div>
         <Link href="/transactions" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--accent-blue)' }}>
-          Xem tất cả <ArrowRight size={14} />
+          View all <ArrowRight size={14} />
         </Link>
       </div>
 
@@ -32,17 +32,17 @@ export function RecentTransactions({ data, isLoading }: RecentTransactionsProps)
       ) : txs.length === 0 ? (
         <div className="empty-state" style={{ flex: 1 }}>
           <span style={{ fontSize: 32 }}>📝</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>Chưa có giao dịch nào</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>No transactions yet</span>
         </div>
       ) : (
         <div style={{ flex: 1, overflowX: 'auto' }}>
           <table className="table" style={{ minWidth: 480 }}>
             <thead>
               <tr>
-                <th>Ngày</th>
-                <th>Tên giao dịch</th>
-                <th>Phân loại</th>
-                <th style={{ textAlign: 'right' }}>Số tiền</th>
+                <th>Date</th>
+                <th>Transaction</th>
+                <th>Type</th>
+                <th style={{ textAlign: 'right' }}>Amount</th>
               </tr>
             </thead>
             <tbody>
@@ -86,7 +86,7 @@ export function RecentTransactions({ data, isLoading }: RecentTransactionsProps)
                           ? { background: `${tx.categoryColor}12`, color: tx.categoryColor }
                           : undefined
                       }>
-                        {tx.type === 'transfer' ? 'Chuyển khoản' : tx.categoryName}
+                        {tx.type === 'transfer' ? 'Transfer' : tx.categoryName}
                       </span>
                     </td>
                     <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>

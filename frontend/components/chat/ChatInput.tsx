@@ -5,10 +5,10 @@ import { useRef, useState, useCallback } from 'react'
 import { motion } from 'framer-motion'
 
 const SUGGESTIONS = [
-  'Tổng quan tài chính tháng này',
-  'Ngân sách còn bao nhiêu?',
-  'Top chi tiêu lớn nhất',
-  'Tài sản ròng hiện tại',
+  'Financial overview this month',
+  'How much budget is left?',
+  'Top spending items',
+  'Current net worth',
 ]
 
 interface Props {
@@ -67,7 +67,7 @@ export function ChatInput({ onSend, disabled }: Props) {
         <textarea
           ref={textareaRef}
           className="chat-textarea"
-          placeholder="Hỏi về tài chính của bạn..."
+          placeholder="Ask about your finances..."
           value={value}
           onChange={(e) => { setValue(e.target.value); handleResize() }}
           onKeyDown={handleKeyDown}

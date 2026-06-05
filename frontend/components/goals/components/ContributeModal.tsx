@@ -4,7 +4,7 @@ import { Portal } from '@/components/ui/Portal'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/toaster'
 import { formatVND, getToday } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiJson, queryKeys } from '@/lib/api'
 import { Goal } from '@/types'
 
 interface ContributeModalProps {
@@ -22,16 +22,15 @@ export function ContributeModal({ goal, onClose }: ContributeModalProps) {
     if (!goal || !amount) return
     setSaving(true)
     try {
-      await fetch(`${API_URL}/api/goals/${goal.id}`, {
+      await apiJson(`/api/goals/${goal.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: {
           addAmount: parseFloat(amount),
           date: getToday(),
-        }),
+        },
       })
-      await qc.invalidateQueries({ queryKey: ['goals'] })
-      toast(`Đã thêm ${formatVND(parseFloat(amount))} vào mục tiêu`)
+      await qc.invalidateQueries({ queryKey: queryKeys.goals })
+      toast(`Added ${formatVND(parseFloat(amount))} to goal`)
       onClose()
     } finally {
       setSaving(false)
@@ -53,7 +52,7 @@ export function ContributeModal({ goal, onClose }: ContributeModalProps) {
                 </p>
               </div>
               <div style={{ marginBottom: 16 }}>
-                <label className="label">Số tiền thêm vào (đ)</label>
+                <label className="label">Amount to add (VND)</label>
                 <input
                   type="number"
                   value={amount}
@@ -64,9 +63,9 @@ export function ContributeModal({ goal, onClose }: ContributeModalProps) {
                 />
               </div>
               <div style={{ display: 'flex', gap: 10 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Hủy</button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
                 <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleContribute} disabled={saving || !amount}>
-                  {saving ? 'Đang lưu...' : 'Thêm vào mục tiêu'}
+                  {saving ? 'Saving...' : 'Add to goal'}
                 </button>
               </div>
             </motion.div>

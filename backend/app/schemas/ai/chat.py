@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from app.schemas.base import CamelModel
 
-
 # --- Request ---
 
 class ChatMessageInput(BaseModel):

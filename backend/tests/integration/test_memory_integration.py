@@ -11,13 +11,11 @@ import uuid
 from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import ChatMessage, ChatSession
 from app.models.user_fact import UserFact
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. SHORT-TERM MEMORY: turn-boundary compaction
@@ -81,7 +79,7 @@ def test_compact_history_truncates_only_old_tool_results():
 
     # Old turns (t1, t2): truncated
     assert len(_find_result("t1")) < 2000
-    assert "ký tự bị cắt" in _find_result("t1") or "cắt bớt" in _find_result("t1")
+    assert "chars truncated" in _find_result("t1")
     assert len(_find_result("t2")) < 2000
 
     # Recent turns (t3, t4): untouched
@@ -166,13 +164,13 @@ async def test_facts_from_session_a_appear_in_session_b_prompt(db: AsyncSession)
         # Session B: build system prompt — should include facts from session A
         facts_prompt = await build_facts_prompt()
 
-    assert "[Thông tin đã biết về người dùng]" in facts_prompt
+    assert "[Known facts about the user]" in facts_prompt
     assert "Lương 25 triệu/tháng" in facts_prompt
     assert "Muốn mua xe trong 6 tháng" in facts_prompt
     assert "Hay quên ghi tiền mặt" in facts_prompt
-    assert "(Ngữ cảnh)" in facts_prompt
-    assert "(Mục tiêu)" in facts_prompt
-    assert "(Thói quen)" in facts_prompt
+    assert "(Context)" in facts_prompt
+    assert "(Goal)" in facts_prompt
+    assert "(Habit)" in facts_prompt
 
 
 async def test_build_system_blocks_splits_stable_and_dynamic(db: AsyncSession):
@@ -197,16 +195,16 @@ async def test_build_system_blocks_splits_stable_and_dynamic(db: AsyncSession):
     stable, dynamic = blocks
 
     assert stable["cache_control"] == {"type": "ephemeral"}
-    assert "WealthLog AI" in stable["text"]
+    assert "You are Chip" in stable["text"]
     # Dynamic content must NOT leak into the cached block.
-    assert "Thời gian hiện tại" not in stable["text"]
+    assert "Current time" not in stable["text"]
     assert "Thu nhập 30 triệu" not in stable["text"]
 
     assert "cache_control" not in dynamic
-    assert "Thời gian hiện tại" in dynamic["text"]
+    assert "Current time" in dynamic["text"]
     assert "Thu nhập 30 triệu" in dynamic["text"]
     assert "Đầu tư chứng khoán" in dynamic["text"]
-    assert "[Thông tin đã biết về người dùng]" in dynamic["text"]
+    assert "[Known facts about the user]" in dynamic["text"]
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -334,22 +332,20 @@ async def test_review_cadence_fires_on_db_turn_count(db: AsyncSession):
     Inserts real ChatMessage rows; maybe_trigger_review counts them and only
     fires when count is a positive multiple of cadence.
     """
-    from app.ai.memory.facts import build_facts_prompt, maybe_trigger_review
+    from app.ai.memory.facts import maybe_trigger_review
 
     session = ChatSession(title="Cadence test")
     db.add(session)
     await db.flush()
 
-    review_task = None
+    review_tasks = []
 
     def capture_task(coro):
-        nonlocal review_task
-        review_task = coro
+        review_tasks.append(coro)
         return MagicMock()
 
     async def _trigger_with_n_user_turns(n: int) -> None:
-        nonlocal review_task
-        review_task = None
+        review_tasks.clear()
         await db.execute(
             ChatMessage.__table__.delete().where(
                 ChatMessage.session_id == session.id,
@@ -369,18 +365,19 @@ async def test_review_cadence_fires_on_db_turn_count(db: AsyncSession):
 
     # Count=2 → skip (2 % 3 != 0)
     await _trigger_with_n_user_turns(2)
-    assert review_task is None
+    assert review_tasks == []
 
     # Count=3 → fire
     await _trigger_with_n_user_turns(3)
-    assert review_task is not None
+    assert len(review_tasks) == 1
+    for task in review_tasks:
+        task.close()
 
     # Count=6 → fire again
     await _trigger_with_n_user_turns(6)
-    assert review_task is not None
-
-    # Drain the coroutine so it doesn't emit warnings
-    review_task.close()
+    assert len(review_tasks) == 1
+    for task in review_tasks:
+        task.close()
 
 
 async def test_review_cadence_skips_empty_user_rows(db: AsyncSession):

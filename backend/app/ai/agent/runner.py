@@ -7,8 +7,6 @@ from collections.abc import AsyncGenerator
 
 import anthropic
 
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs, supports_thinking
-
 from app.ai.agent.compaction import _compact_history, _truncate_tool_result
 from app.ai.agent.prompt import build_system_blocks
 from app.ai.agent.streaming import (
@@ -30,6 +28,7 @@ from app.ai.agent.streaming import (
 from app.ai.agent.token_budget import estimate_request_tokens
 from app.ai.agent.tools import MAX_ITERATIONS, execute_tool, get_tools_for_claude
 from app.ai.memory.episodic import summarize_session
+from app.ai.model_registry import get_preferred_model, resolve_client_kwargs, supports_thinking
 from app.config import settings
 from app.logging_config import get_logger
 

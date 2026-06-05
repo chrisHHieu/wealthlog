@@ -11,38 +11,38 @@ import type { ChatMessage as ChatMessageType, ChatStep } from '@/types/chat'
 
 const TOOL_LABELS: Record<string, string> = {
   // Reports
-  get_financial_summary:        'Xem tổng quan tài chính',
-  get_spending_trends:          'Phân tích xu hướng chi tiêu',
-  get_top_expenses:             'Xem chi tiêu lớn nhất',
-  get_upcoming_bills:           'Kiểm tra hóa đơn sắp tới',
-  get_monthly_digest:           'Đọc báo cáo tháng',
+  get_financial_summary:        'View financial overview',
+  get_spending_trends:          'Analyze spending trends',
+  get_top_expenses:             'View top expenses',
+  get_upcoming_bills:           'Check upcoming bills',
+  get_monthly_digest:           'Read monthly digest',
   // Transactions
-  search_transactions:          'Tìm kiếm giao dịch',
-  get_spending_by_category:     'Xem chi tiêu theo danh mục',
-  get_income_by_category:       'Xem thu nhập theo danh mục',
-  create_transaction:           'Tạo giao dịch',
-  create_multiple_transactions: 'Tạo nhiều giao dịch',
-  update_transaction:           'Cập nhật giao dịch',
-  delete_transaction:           'Xóa giao dịch',
+  search_transactions:          'Search transactions',
+  get_spending_by_category:     'View spending by category',
+  get_income_by_category:       'View income by category',
+  create_transaction:           'Create transaction',
+  create_multiple_transactions: 'Create multiple transactions',
+  update_transaction:           'Update transactions',
+  delete_transaction:           'Delete transactions',
   // Accounts
-  get_accounts:                 'Xem danh sách tài khoản',
-  get_account_summary:          'Xem tổng quan tài khoản',
+  get_accounts:                 'View accounts',
+  get_account_summary:          'View account overview',
   // Budgets
-  get_budget_status:            'Kiểm tra ngân sách',
+  get_budget_status:            'Check budget',
   // Goals
-  get_goals:                    'Xem mục tiêu tiết kiệm',
+  get_goals:                    'View savings goals',
   // Investments
-  get_portfolio:                'Xem danh mục đầu tư',
+  get_portfolio:                'View investment portfolio',
   // Memory
-  list_my_facts:                'Xem thông tin đã ghi nhớ',
-  forget_fact:                  'Xóa thông tin đã ghi nhớ',
-  edit_fact:                    'Cập nhật thông tin đã ghi nhớ',
-  verify_fact:                  'Xác nhận thông tin đã ghi nhớ',
-  list_commitments:             'Xem cam kết',
-  complete_commitment:          'Đánh dấu cam kết hoàn thành',
-  dismiss_commitment:           'Bỏ qua cam kết',
+  list_my_facts:                'View remembered facts',
+  forget_fact:                  'Delete remembered fact',
+  edit_fact:                    'Update remembered fact',
+  verify_fact:                  'Confirm remembered fact',
+  list_commitments:             'View commitments',
+  complete_commitment:          'Mark commitment complete',
+  dismiss_commitment:           'Dismiss commitment',
   // Analytics
-  query_database:               'Phân tích dữ liệu',
+  query_database:               'Analyze data',
 }
 
 interface Props {
@@ -84,12 +84,12 @@ export function ChatMessage({ message }: Props) {
       transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
     >
       <div className="chat-ai-icon">
-        <Image src="/images/ai-avatar.png" alt="Chip" width={32} height={32} />
+        <Image src="/images/ai-avatar.png" alt="Expensep" width={32} height={32} />
       </div>
 
       <div className="chat-ai-body">
         {showPendingDots && (
-          <div className="chat-inline-dots" aria-label="Đang xử lý">
+          <div className="chat-inline-dots" aria-label="Processing">
             <span /><span /><span />
           </div>
         )}
@@ -105,7 +105,7 @@ export function ChatMessage({ message }: Props) {
             {finalAnswer.content ? (
               <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalAnswer.content}</ReactMarkdown>
             ) : (
-              <div className="chat-inline-dots" aria-label="Đang xử lý">
+              <div className="chat-inline-dots" aria-label="Processing">
                 <span /><span /><span />
               </div>
             )}
@@ -185,7 +185,7 @@ function ThinkingStep({ step }: { step: Extract<ChatStep, { kind: 'thinking' }> 
             expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />
           )}
           <span className="chat-step-label">
-            {step.streaming ? 'Đang suy nghĩ...' : 'Suy nghĩ sâu'}
+            {step.streaming ? 'Thinking...' : 'Deep thinking'}
           </span>
           {!step.streaming && hasContent && (
             <span className="chat-step-thinking-chars">
@@ -231,7 +231,7 @@ function TimelineStep({ step }: { step: ChatStep }) {
           </div>
         </div>
         <div className="chat-step-body">
-          <div className="chat-step-label chat-step-label-inline">Lập luận</div>
+          <div className="chat-step-label chat-step-label-inline">Reasoning</div>
           <div className="chat-step-thought-text">
             {step.content}
             {step.streaming && <span className="chat-cursor" />}
@@ -289,7 +289,7 @@ function TimelineStep({ step }: { step: ChatStep }) {
                 <>
                   <div className="chat-step-observation-label chat-step-observation-label--input">
                     <Eye size={10} />
-                    <span>Tham số</span>
+                    <span>Parameters</span>
                   </div>
                   <div className="chat-step-input-params">
                     {Object.entries(step.input!).map(([k, v]) => (
@@ -307,7 +307,7 @@ function TimelineStep({ step }: { step: ChatStep }) {
                 <>
                   <div className="chat-step-observation-label" style={{ marginTop: hasInput ? 'var(--space-3)' : 0 }}>
                     <Eye size={10} />
-                    <span>Kết quả</span>
+                    <span>Result</span>
                   </div>
                   <pre className="chat-step-result">{step.result}</pre>
                 </>

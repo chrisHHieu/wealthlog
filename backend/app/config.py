@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",
     )
 
     # ── Database ─────────────────────────────────────────────────────────────
@@ -67,8 +69,10 @@ class Settings(BaseSettings):
 
     # ── Long-term memory (UserModel synthesis) ───────────────────────────────
     user_model_synthesis_cadence: int = 5   # synthesize after every N new sessions
-    user_model_fact_delta_threshold: int = 5  # also synthesize when N new facts added since last run
-    user_model_max_age_days: int = 1        # also synthesize if model is older than N days and any new data exists
+    # Also synthesize when N new facts were added since last run.
+    user_model_fact_delta_threshold: int = 5
+    # Also synthesize if model is stale and any new data exists.
+    user_model_max_age_days: int = 1
     user_model_max_versions: int = 3        # keep last N versions, prune older ones
 
     # ── MCP server (stdio/SSE entry point for external clients) ──────────────
@@ -76,7 +80,10 @@ class Settings(BaseSettings):
     mcp_port: int = 8002
 
     # ── App ──────────────────────────────────────────────────────────────────
-    debug: bool = False
+    debug: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("WEALTHLOG_DEBUG", "APP_DEBUG"),
+    )
     app_name: str = "WealthLog API"
 
 

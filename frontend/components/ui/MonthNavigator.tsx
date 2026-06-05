@@ -29,7 +29,7 @@ export function MonthNavigator({ value, onChange }: { value: string; onChange: (
         minWidth: 110, textAlign: 'center',
         color: 'var(--text-primary)',
       }}>
-        Tháng {month}, {year}
+        Month {month}, {year}
       </span>
       <button
         onClick={() => value >= getCurrentMonthStr() ? null : onChange(navigateMonth(value, 1))}
@@ -45,7 +45,7 @@ export function MonthNavigator({ value, onChange }: { value: string; onChange: (
           className="btn btn-ghost btn-sm"
           style={{ fontSize: 11, padding: '3px 8px', marginLeft: 4, color: 'var(--accent-green)', borderColor: 'var(--accent-green)' }}
         >
-          Hiện tại
+          Current
         </button>
       )}
     </div>

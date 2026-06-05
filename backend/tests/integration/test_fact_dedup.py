@@ -3,7 +3,7 @@
 import json
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from sqlalchemy import select
@@ -25,8 +25,8 @@ def _patch_session(db: AsyncSession):
 
 async def test_save_user_fact_rejects_exact_duplicate(db: AsyncSession):
     """SQLite has no pg_trgm; the dispatcher must keep exact-equality dedup."""
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         first = await memory_module.save_user_fact(
@@ -43,8 +43,8 @@ async def test_save_user_fact_rejects_exact_duplicate(db: AsyncSession):
 
 
 async def test_save_user_fact_distinct_facts_both_save(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         await memory_module.save_user_fact(
@@ -62,14 +62,14 @@ async def test_save_user_fact_distinct_facts_both_save(db: AsyncSession):
 
 
 async def test_update_user_fact_applies_all_fields(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     row = UserFact(fact="Muốn tiết kiệm 50tr", category="goal", importance=7)
     db.add(row)
     await db.flush()
 
-    expiry = datetime.now(timezone.utc) + timedelta(days=30)
+    expiry = datetime.now(UTC) + timedelta(days=30)
     with _patch_session(db):
         ok = await memory_module.update_user_fact(
             fact_id=row.id,
@@ -87,8 +87,8 @@ async def test_update_user_fact_applies_all_fields(db: AsyncSession):
 
 
 async def test_update_user_fact_preserves_identity_and_stats(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     original_id = uuid.uuid4()
     row = UserFact(
@@ -135,8 +135,8 @@ async def test_update_user_fact_missing_returns_false(db: AsyncSession):
 
 
 async def test_apply_review_item_add(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     with _patch_session(db):
         outcome = await memory_module._apply_review_item(
@@ -152,8 +152,8 @@ async def test_apply_review_item_add(db: AsyncSession):
 
 
 async def test_apply_review_item_replace_updates_existing(db: AsyncSession):
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     row = UserFact(fact="Mục tiêu 50tr", category="goal", importance=7)
     db.add(row)
@@ -178,8 +178,8 @@ async def test_apply_review_item_replace_updates_existing(db: AsyncSession):
 
 async def test_apply_review_item_replace_with_bad_index_falls_back_to_add(db: AsyncSession):
     """A bogus 'replaces' index shouldn't drop the insight — treat as add."""
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     row = UserFact(fact="existing", category="general", importance=5)
     db.add(row)
@@ -219,8 +219,8 @@ async def test_apply_review_item_empty_fact_skipped(db: AsyncSession):
 
 async def test_run_review_routes_add_and_replace(db: AsyncSession):
     """Mixed batch: one add + one replace against an existing fact."""
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     original = UserFact(fact="Mục tiêu tiết kiệm 50tr", category="goal", importance=7)
     db.add(original)
@@ -261,8 +261,8 @@ async def test_run_review_routes_add_and_replace(db: AsyncSession):
 
 async def test_run_review_replace_missing_action_defaults_to_add(db: AsyncSession):
     """Items without an 'action' key are treated as add (backward compat)."""
-    from app.models.user_fact import UserFact
     from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
 
     api_resp = MagicMock()
     api_resp.content = [MagicMock(text=json.dumps([

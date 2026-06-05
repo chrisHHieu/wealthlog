@@ -20,7 +20,7 @@ export function Pagination({ page, totalPages, setPage }: PaginationProps) {
         disabled={page === 1}
         style={{ display: 'flex', alignItems: 'center', gap: 4 }}
       >
-        <ChevronLeft size={15} /> Trước
+        <ChevronLeft size={15} /> Previous
       </button>
 
       <div style={{ display: 'flex', gap: 4 }}>

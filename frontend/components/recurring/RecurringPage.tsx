@@ -4,22 +4,33 @@ import React, { useState, useEffect } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
 import { Plus, Settings2, Power, PowerOff, Loader2, Trash2 } from 'lucide-react'
 import { formatVND, formatDateVI } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson } from '@/lib/api'
 import { RecurringDrawer } from './RecurringDrawer'
 
+interface RecurringItem {
+  id: string
+  type: string
+  amount: number
+  description?: string
+  frequency: string
+  daysOfWeek?: number[] | string | null
+  nextRunDate: string
+  accountName?: string
+  categoryIcon?: string
+  categoryColor?: string
+  isActive: boolean
+}
+
 export function RecurringPage() {
-  const [items, setItems] = useState<any[]>([])
+  const [items, setItems] = useState<RecurringItem[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [selectedItem, setSelectedItem] = useState<any | null>(null)
+  const [selectedItem, setSelectedItem] = useState<RecurringItem | null>(null)
   const [showDrawer, setShowDrawer] = useState(false)
 
   const fetchItems = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_URL}/api/recurring`)
-      if (res.ok) {
-        setItems(await res.json())
-      }
+      setItems(await apiGet<RecurringItem[]>('/api/recurring'))
     } finally {
       setIsLoading(false)
     }
@@ -30,28 +41,27 @@ export function RecurringPage() {
   }, [])
 
   const toggleActive = async (id: string, current: boolean) => {
-    await fetch(`${API_URL}/api/recurring/${id}`, {
+    await apiJson(`/api/recurring/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isActive: !current }),
+      body: { isActive: !current },
     })
     fetchItems()
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Bạn có chắc muốn xóa lịch định kỳ này?')) return
-    await fetch(`${API_URL}/api/recurring/${id}`, { method: 'DELETE' })
+    if (!confirm('Are you sure you want to delete this recurring schedule?')) return
+    await apiDelete(`/api/recurring/${id}`)
     fetchItems()
   }
 
   const DAYS_VI: Record<number, string> = { 0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7' }
 
-  const freqLabel = (item: any) => {
+  const freqLabel = (item: RecurringItem) => {
     if (item.daysOfWeek) {
       const days: number[] = Array.isArray(item.daysOfWeek) ? item.daysOfWeek : JSON.parse(item.daysOfWeek)
       return days.sort((a, b) => a - b).map(d => DAYS_VI[d] ?? d).join(', ')
     }
-    const map: Record<string, string> = { daily: 'Hàng ngày', weekly: 'Hàng tuần', monthly: 'Hàng tháng', yearly: 'Hàng năm' }
+    const map: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' }
     return map[item.frequency] || item.frequency
   }
 
@@ -61,19 +71,19 @@ export function RecurringPage() {
       {/* Header — matches TransactionsPage style */}
       <div style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Giao dịch định kỳ</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Recurring transactions</h1>
           <button
             className="btn btn-primary"
             onClick={() => { setSelectedItem(null); setShowDrawer(true) }}
             style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <Plus size={16} /> Thêm mới
+            <Plus size={16} /> Add new
           </button>
         </div>
         <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          Tự động hóa các khoản thu chi cố định.
+          Automate fixed income and expenses.
           {items.length > 0 && (
-            <span style={{ color: 'var(--text-tertiary)' }}> • {items.filter(i => i.isActive).length} đang hoạt động</span>
+            <span style={{ color: 'var(--text-tertiary)' }}> • {items.filter(i => i.isActive).length} active</span>
           )}
         </p>
       </div>
@@ -86,9 +96,9 @@ export function RecurringPage() {
       ) : items.length === 0 ? (
         <div className="card" style={{ padding: '60px 24px', textAlign: 'center' }}>
           <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
-          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>Chưa có giao dịch lặp lại</div>
+          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>No recurring transactions yet</div>
           <div style={{ fontSize: 13, color: 'var(--text-tertiary)', maxWidth: 360, margin: '0 auto' }}>
-            Thêm tiền nhà, Netflix, tiền mạng, lương... để hệ thống tự động ghi nhận mỗi tháng.
+            Add rent, subscriptions, internet bills, salary, and other fixed items so the system can record them automatically.
           </div>
         </div>
       ) : (
@@ -116,10 +126,10 @@ export function RecurringPage() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {item.description || 'Không tên'}
+                    {item.description || 'Untitled'}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                    {freqLabel(item)} • Kế tiếp: {formatDateVI(item.nextRunDate)}
+                    {freqLabel(item)} • Next: {formatDateVI(item.nextRunDate)}
                     {item.accountName && <span> • {item.accountName}</span>}
                   </div>
                 </div>
@@ -137,7 +147,7 @@ export function RecurringPage() {
                   <button
                     onClick={() => toggleActive(item.id, item.isActive)}
                     className="btn-icon"
-                    title={item.isActive ? 'Tạm dừng' : 'Kích hoạt'}
+                    title={item.isActive ? 'Pause' : 'Activate'}
                     style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: item.isActive ? 'var(--accent-green)' : 'var(--text-tertiary)' }}
                   >
                     {item.isActive ? <Power size={15} /> : <PowerOff size={15} />}
@@ -145,7 +155,7 @@ export function RecurringPage() {
                   <button
                     onClick={() => { setSelectedItem(item); setShowDrawer(true) }}
                     className="btn-icon"
-                    title="Chỉnh sửa"
+                    title="Edit"
                     style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                   >
                     <Settings2 size={15} />
@@ -153,7 +163,7 @@ export function RecurringPage() {
                   <button
                     onClick={() => handleDelete(item.id)}
                     className="btn-icon"
-                    title="Xóa"
+                    title="Delete"
                     style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-red)' }}
                   >
                     <Trash2 size={15} />

@@ -37,7 +37,11 @@ def register(mcp: FastMCP) -> None:
 
             lines = []
             for g in rows:
-                pct = round((g.current_amount / g.target_amount) * 100) if g.target_amount > 0 else 0
+                pct = (
+                    round((g.current_amount / g.target_amount) * 100)
+                    if g.target_amount > 0
+                    else 0
+                )
                 status = "Completed" if g.is_completed else f"{pct}%"
                 goal_type = _TYPE_LABELS.get(g.type.value, g.type.value)
                 deadline = f" | Due: {g.deadline}" if g.deadline else ""

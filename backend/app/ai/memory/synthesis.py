@@ -6,11 +6,10 @@ from datetime import UTC, datetime
 import anthropic
 from sqlalchemy import delete, func, select
 
-from app.ai.model_registry import get_structured_model, resolve_client_kwargs
-
 from app.ai.memory.episodic import get_recent_summaries
 from app.ai.memory.facts import get_user_facts
 from app.ai.memory.prompts import SYNTHESIS_PROMPT
+from app.ai.model_registry import get_structured_model, resolve_client_kwargs
 from app.config import settings
 from app.database import get_session
 from app.logging_config import get_logger
@@ -26,14 +25,18 @@ logger = get_logger(__name__)
 
 async def get_latest_user_model() -> UserModel | None:
     """Return the latest UserModel row, or None if not yet created."""
-    async with get_session() as db:
-        return (
-            await db.execute(
-                select(UserModel)
-                .order_by(UserModel.created_at.desc())
-                .limit(1)
-            )
-        ).scalar_one_or_none()
+    try:
+        async with get_session() as db:
+            return (
+                await db.execute(
+                    select(UserModel)
+                    .order_by(UserModel.created_at.desc())
+                    .limit(1)
+                )
+            ).scalar_one_or_none()
+    except Exception:
+        logger.debug("Could not load latest UserModel", exc_info=True)
+        return None
 
 
 async def get_user_model_text() -> str | None:
@@ -118,7 +121,8 @@ async def maybe_synthesize_user_model() -> None:
     elif fact_trigger:
         reason = f"fact delta ({new_facts} new facts)"
     else:
-        reason = f"staleness ({(datetime.now(UTC) - latest.created_at).days}d old, {new_facts} new facts)"
+        age_days = (datetime.now(UTC) - latest.created_at).days
+        reason = f"staleness ({age_days}d old, {new_facts} new facts)"
 
     logger.info("Scheduling UserModel synthesis — trigger: %s", reason)
     asyncio.create_task(_run_synthesis(total_sessions))

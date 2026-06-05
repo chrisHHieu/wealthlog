@@ -4,14 +4,12 @@ import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import ChatMessage, ChatSession
 from app.models.user_fact import UserFact
-
 
 # ── User Facts API (CRUD) ──────────────────────────────────────────────────
 
@@ -27,7 +25,7 @@ async def test_create_fact(client: AsyncClient):
         "fact": "Lương ngày 15 hàng tháng",
         "category": "context",
     })
-    assert r.status_code == 200
+    assert r.status_code == 201
     data = r.json()
     assert data["fact"] == "Lương ngày 15 hàng tháng"
     assert data["category"] == "context"
@@ -36,7 +34,7 @@ async def test_create_fact(client: AsyncClient):
 
 async def test_create_fact_default_category(client: AsyncClient):
     r = await client.post("/api/memory/facts", json={"fact": "Some fact"})
-    assert r.status_code == 200
+    assert r.status_code == 201
     assert r.json()["category"] == "general"
 
 
@@ -122,12 +120,12 @@ async def test_build_facts_prompt_with_facts(db: AsyncSession):
     with _patch_get_session(db):
         result = await build_facts_prompt()
 
-    assert "[Thông tin đã biết về người dùng]" in result
+    assert "[Known facts about the user]" in result
     assert "Lương 20 triệu/tháng" in result
     assert "Muốn tiết kiệm 100 triệu" in result
-    assert "(Mục tiêu)" in result
-    assert "(Ngữ cảnh)" in result
-    assert "[Hết thông tin người dùng]" in result
+    assert "(Goal)" in result
+    assert "(Context)" in result
+    assert "[End of user facts]" in result
 
 
 # ── Memory Service: maybe_trigger_review ────────────────────────────────────
@@ -148,6 +146,13 @@ async def test_maybe_trigger_review_cadence(db: AsyncSession):
         yield db
 
     async def _fire_after_n_turns(n: int) -> bool:
+        review_task = None
+
+        def capture_task(coro):
+            nonlocal review_task
+            review_task = coro
+            return MagicMock()
+
         await db.execute(
             ChatMessage.__table__.delete().where(
                 ChatMessage.session_id == session.id,
@@ -161,10 +166,13 @@ async def test_maybe_trigger_review_cadence(db: AsyncSession):
 
         with patch("app.ai.memory.facts.get_session", _patched_session), \
              patch("app.ai.memory.facts.settings") as s, \
-             patch("app.ai.memory.facts.asyncio") as mock_asyncio:
+             patch("app.ai.memory.facts.asyncio.create_task", side_effect=capture_task):
             s.agent_review_cadence = 3
             await maybe_trigger_review(session.id, [{"role": "user", "content": "x"}])
-            return mock_asyncio.create_task.called
+            called = review_task is not None
+            if review_task is not None:
+                review_task.close()
+            return called
 
     assert await _fire_after_n_turns(2) is False
     assert await _fire_after_n_turns(3) is True

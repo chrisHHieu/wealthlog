@@ -10,7 +10,7 @@ interface DatePickerProps {
   disableFuture?: boolean
 }
 
-export function DatePicker({ value, onChange, placeholder = 'Chọn ngày...', disableFuture = false }: DatePickerProps) {
+export function DatePicker({ value, onChange, placeholder = 'Select date...', disableFuture = false }: DatePickerProps) {
   const [isOpen, setIsOpen] = useState(false)
   const [viewDate, setViewDate] = useState(() => value ? new Date(value) : new Date())
   const containerRef = useRef<HTMLDivElement>(null)
@@ -128,7 +128,7 @@ export function DatePicker({ value, onChange, placeholder = 'Chọn ngày...', d
               >
                 <ChevronLeft size={18} />
               </button>
-              <span style={{ fontSize: 14, fontWeight: 600 }}>Tháng {viewMonth + 1}, {viewYear}</span>
+              <span style={{ fontSize: 14, fontWeight: 600 }}>Month {viewMonth + 1}, {viewYear}</span>
               <button 
                 onClick={nextMonth}
                 className="btn btn-ghost"
@@ -201,7 +201,7 @@ export function DatePicker({ value, onChange, placeholder = 'Chọn ngày...', d
                 className="btn btn-ghost btn-sm"
                 style={{ fontSize: 12, padding: '4px 10px', color: 'var(--text-tertiary)' }}
               >
-                Xóa
+                Delete
               </button>
               <button 
                 type="button"
@@ -209,7 +209,7 @@ export function DatePicker({ value, onChange, placeholder = 'Chọn ngày...', d
                 className="btn btn-ghost btn-sm"
                 style={{ fontSize: 12, padding: '4px 10px', color: 'var(--accent-green)' }}
               >
-                Hôm nay
+                Today
               </button>
             </div>
           </motion.div>

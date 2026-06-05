@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { ReportsData } from '@/types'
-import { API_URL } from '@/lib/api'
+import { apiGet, queryKeys } from '@/lib/api'
 
 export type ReportMode = 'month' | 'year'
 
@@ -36,13 +36,13 @@ export function useReports() {
   const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr)
   const [selectedYear, setSelectedYear] = useState(getCurrentYear)
 
-  const params = mode === 'month'
-    ? `mode=month&month=${selectedMonth}`
-    : `mode=year&year=${selectedYear}`
-
   const { data = emptyData, isLoading } = useQuery<ReportsData>({
-    queryKey: ['reports', mode, selectedMonth, selectedYear],
-    queryFn: () => fetch(`${API_URL}/api/reports?${params}`).then(r => r.json()),
+    queryKey: queryKeys.reports(mode, selectedMonth, selectedYear),
+    queryFn: () => apiGet<ReportsData>('/api/reports', {
+      mode,
+      month: mode === 'month' ? selectedMonth : undefined,
+      year: mode === 'year' ? selectedYear : undefined,
+    }),
   })
 
   return {

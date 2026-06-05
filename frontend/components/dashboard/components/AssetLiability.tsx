@@ -37,7 +37,7 @@ export function AssetLiability({ data, isLoading }: AssetLiabilityProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', marginBottom: 'var(--space-5)' }}>
-        Cấu trúc Tài sản & Nợ
+        Asset & Debt structure
       </div>
 
       {isLoading ? (
@@ -47,7 +47,7 @@ export function AssetLiability({ data, isLoading }: AssetLiabilityProps) {
       ) : !al ? (
         <div className="empty-state" style={{ flex: 1 }}>
           <span style={{ fontSize: 32 }}>🏦</span>
-          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>Chưa có dữ liệu</span>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)' }}>No data yet</span>
         </div>
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
@@ -60,7 +60,7 @@ export function AssetLiability({ data, isLoading }: AssetLiabilityProps) {
             color: 'var(--accent-green)',
             marginBottom: 'var(--space-2)',
           }}>
-            Tài sản
+            Asset
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {al.assets.map(a => (
@@ -83,7 +83,7 @@ export function AssetLiability({ data, isLoading }: AssetLiabilityProps) {
                 color: 'var(--accent-red)',
                 marginBottom: 'var(--space-2)',
               }}>
-                Nợ
+                Debt
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 {al.liabilities.map(l => (
@@ -97,7 +97,7 @@ export function AssetLiability({ data, isLoading }: AssetLiabilityProps) {
           <div style={{ marginTop: 'auto', paddingTop: 'var(--space-4)' }}>
             <div className="divider" style={{ marginBottom: 'var(--space-3)' }} />
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-secondary)' }}>Tổng ròng</span>
+              <span style={{ fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--text-secondary)' }}>Net total</span>
               <span className="font-display" style={{
                 fontSize: 'var(--text-xl)',
                 fontWeight: 400,

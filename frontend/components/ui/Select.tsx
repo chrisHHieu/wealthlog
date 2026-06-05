@@ -17,7 +17,7 @@ interface SelectProps {
   minWidth?: string | number
 }
 
-export function Select({ value, onChange, options, placeholder = 'Chọn...', width, minWidth = 150 }: SelectProps) {
+export function Select({ value, onChange, options, placeholder = 'Select...', width, minWidth = 150 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 

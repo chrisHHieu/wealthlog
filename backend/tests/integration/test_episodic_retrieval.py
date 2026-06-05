@@ -2,7 +2,7 @@
 
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from unittest.mock import patch
 
 from sqlalchemy import select
@@ -35,7 +35,7 @@ async def _add_summary(
     db.add(sess)
     await db.flush()
 
-    when = datetime.now(timezone.utc) - timedelta(days=days_ago)
+    when = datetime.now(UTC) - timedelta(days=days_ago)
     row = SessionSummary(
         session_id=sess.id,
         summary=summary,

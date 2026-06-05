@@ -13,7 +13,7 @@ interface AnimatedCounterProps {
 export function AnimatedCounter({
   value,
   duration = 1200,
-  format = (v) => v.toLocaleString('vi-VN'),
+  format = (v) => v.toLocaleString('en-US'),
   className,
   style,
 }: AnimatedCounterProps) {

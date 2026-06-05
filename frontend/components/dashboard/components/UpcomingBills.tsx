@@ -9,7 +9,7 @@ interface UpcomingBillsProps {
 
 function formatBillDate(dateStr: string): string {
   const d = new Date(dateStr)
-  return `Hạn: ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
+  return `Due: ${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
 function getDaysUntil(dateStr: string): number {
@@ -24,7 +24,7 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-5)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Hóa đơn sắp tới</div>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Upcoming bills</div>
         <CalendarClock size={16} style={{ color: 'var(--text-tertiary)' }} />
       </div>
 
@@ -35,7 +35,7 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
       ) : bills.length === 0 ? (
         <div className="empty-state" style={{ flex: 1, padding: 'var(--space-6) var(--space-3)' }}>
           <span style={{ fontSize: 32 }}>🎉</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>Không có hóa đơn sắp tới</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>No upcoming bills</span>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-2-5)', flex: 1 }}>
@@ -96,7 +96,7 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
                     textTransform: 'uppercase',
                     letterSpacing: '0.04em',
                   }}>
-                    {daysLeft === 0 ? 'HÔM NAY' : `còn ${daysLeft} ngày`}
+                    {daysLeft === 0 ? 'TODAY' : `left ${daysLeft} days`}
                   </div>
                 </div>
               </div>

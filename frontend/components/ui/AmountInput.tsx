@@ -76,7 +76,7 @@ export function AmountInput({ value, onChange, color = 'var(--text-primary)', au
         transition: 'all 0.2s',
         userSelect: 'none'
       }}>
-        đ
+        VND
       </span>
     </div>
   )

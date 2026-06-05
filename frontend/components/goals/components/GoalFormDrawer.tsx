@@ -6,15 +6,15 @@ import { useToast } from '@/components/ui/toaster'
 import { Goal } from '@/types'
 import { DatePicker } from '@/components/ui/DatePicker'
 import { parseShorthandAmount, formatAmountLive } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiJson, queryKeys } from '@/lib/api'
 
 const GOAL_TYPES = [
-  { key: 'emergency', label: 'Quỹ khẩn cấp', icon: '🛡️' },
-  { key: 'savings', label: 'Tiết kiệm', icon: '💰' },
-  { key: 'purchase', label: 'Mua sắm lớn', icon: '🛒' },
-  { key: 'investment', label: 'Quỹ đầu tư', icon: '📈' },
-  { key: 'debt', label: 'Trả nợ', icon: '💳' },
-  { key: 'custom', label: 'Tùy chỉnh', icon: '🎯' },
+  { key: 'emergency', label: 'Emergency fund', icon: '🛡️' },
+  { key: 'savings', label: 'Savings', icon: '💰' },
+  { key: 'purchase', label: 'Large purchase', icon: '🛒' },
+  { key: 'investment', label: 'Investment fund', icon: '📈' },
+  { key: 'debt', label: 'Debt repayment', icon: '💳' },
+  { key: 'custom', label: 'Custom', icon: '🎯' },
 ]
 
 const GOAL_COLORS = ['#00C896', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6', '#d946ef', '#06b6d4', '#84cc16']
@@ -76,22 +76,20 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
       }
 
       if (initialData) {
-        await fetch(`${API_URL}/api/goals/${initialData.id}`, {
+        await apiJson(`/api/goals/${initialData.id}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
         })
-        toast('Đã cập nhật mục tiêu')
+        toast('Goal updated')
       } else {
-        await fetch(`${API_URL}/api/goals`, {
+        await apiJson('/api/goals', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
+          body,
         })
-        toast('Đã tạo mục tiêu mới')
+        toast('Goal created')
       }
 
-      await qc.invalidateQueries({ queryKey: ['goals'] })
+      await qc.invalidateQueries({ queryKey: queryKeys.goals })
       onClose()
     } finally {
       setSaving(false)
@@ -106,7 +104,7 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
             <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={onClose} />
             <motion.div className="drawer" style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <h2 style={{ fontSize: 17, fontWeight: 600 }}>{initialData ? 'Sửa mục tiêu' : 'Tạo mục tiêu mới'}</h2>
+                <h2 style={{ fontSize: 17, fontWeight: 600 }}>{initialData ? 'Edit goal' : 'Create new goal'}</h2>
                 <button onClick={onClose} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }}>✕</button>
               </div>
 
@@ -125,7 +123,7 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
                 </div>
 
                 <div>
-                  <label className="label">Màu</label>
+                  <label className="label">Color</label>
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {GOAL_COLORS.map(c => (
                       <button key={c} onClick={() => setFormColor(c)} style={{
@@ -137,8 +135,8 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
                 </div>
 
                 <div>
-                  <label className="label">Loại mục tiêu</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 6 }}>
+                  <label className="label">Goal type</label>
+                  <div className="goal-type-grid">
                     {GOAL_TYPES.map(t => (
                       <button key={t.key} onClick={() => { setFormType(t.key); setFormIcon(t.icon) }} style={{
                         padding: '8px 6px', borderRadius: 8, border: `1px solid ${formType === t.key ? formColor : 'var(--surface-border)'}`,
@@ -153,32 +151,45 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
                 </div>
 
                 <div>
-                  <label className="label">Tên mục tiêu</label>
-                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="VD: Du lịch Nhật Bản" className="input" />
+                  <label className="label">Goal name</label>
+                  <input type="text" value={formName} onChange={e => setFormName(e.target.value)} placeholder="Example: Japan trip" className="input" />
                 </div>
 
                 <div>
-                  <label className="label">Mục tiêu (đ)</label>
+                  <label className="label">Goals (VND)</label>
                   <input type="text" value={formTarget} onChange={e => setFormTarget(formatAmountLive(e.target.value))} placeholder="0" className="input" />
                 </div>
 
                 <div>
-                  <label className="label">Số tiền hiện có (đ)</label>
+                  <label className="label">Current amount (VND)</label>
                   <input type="text" value={formCurrent} onChange={e => setFormCurrent(formatAmountLive(e.target.value))} placeholder="0" className="input" />
                 </div>
 
                 <div style={{ zIndex: 10 }}>
-                  <label className="label">Hạn chót (tuỳ chọn)</label>
-                  <DatePicker value={formDeadline} onChange={setFormDeadline} placeholder="Không xác định" />
+                  <label className="label">Deadline (optional)</label>
+                  <DatePicker value={formDeadline} onChange={setFormDeadline} placeholder="No deadline" />
                 </div>
               </div>
 
               <div className="drawer-footer">
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Hủy</button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={onClose}>Cancel</button>
                 <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleSave} disabled={saving || !formName.trim() || !formTarget}>
-                  {saving ? 'Đang lưu...' : initialData ? 'Cập nhật' : 'Tạo mục tiêu'}
+                  {saving ? 'Saving...' : initialData ? 'Update' : 'Create goal'}
                 </button>
               </div>
+              <style jsx>{`
+                .goal-type-grid {
+                  display: grid;
+                  grid-template-columns: repeat(3, minmax(0, 1fr));
+                  gap: 6px;
+                }
+
+                @media (max-width: 480px) {
+                  .goal-type-grid {
+                    grid-template-columns: 1fr;
+                  }
+                }
+              `}</style>
             </motion.div>
           </>
         )}

@@ -304,7 +304,11 @@ def _asset_liability(rows) -> dict:
         if t in ASSET_TYPES:
             assets.append({"type": t, "label": ASSET_LABELS.get(t, t), "total": total})
         else:
-            liabilities.append({"type": t, "label": LIABILITY_LABELS.get(t, t), "total": abs(total)})
+            liabilities.append({
+                "type": t,
+                "label": LIABILITY_LABELS.get(t, t),
+                "total": abs(total),
+            })
     assets.sort(key=lambda x: x["total"], reverse=True)
     liabilities.sort(key=lambda x: x["total"], reverse=True)
 

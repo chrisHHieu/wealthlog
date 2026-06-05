@@ -44,6 +44,7 @@ class TopTransaction(CamelModel):
     type: str
     amount: float
     date: str
+    description: str
     category_name: str
     category_icon: str
     category_color: str

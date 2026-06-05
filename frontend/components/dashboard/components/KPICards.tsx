@@ -45,6 +45,25 @@ function PctBadge({ pctChange, isGood }: { pctChange: string; isGood: boolean })
   )
 }
 
+function StatusBadge({ label, isGood }: { label: string; isGood: boolean }) {
+  return (
+    <div style={{
+      display: 'inline-flex',
+      alignItems: 'center',
+      gap: 3,
+      padding: '2px 8px',
+      borderRadius: 'var(--radius-full)',
+      background: isGood ? 'var(--accent-green-subtle)' : 'var(--accent-red-subtle)',
+      color: isGood ? 'var(--accent-green)' : 'var(--accent-red)',
+      fontSize: 'var(--text-xs)',
+      fontWeight: 700,
+    }}>
+      {isGood ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+      {label}
+    </div>
+  )
+}
+
 function KPICard({ item, index }: { item: KPIItem; index: number }) {
   const { label, value, color, glowClass, icon, pctChange, pctPositiveIsGood, format } = item
   const pctNum = pctChange ? parseFloat(pctChange) : 0
@@ -100,10 +119,10 @@ function KPICard({ item, index }: { item: KPIItem; index: number }) {
   )
 }
 
-function NetWorthHero({ data, incomePct }: { data?: DashboardData; incomePct: string | null }) {
+function NetWorthHero({ data }: { data?: DashboardData }) {
   const netWorth = data?.netWorth ?? 0
-  const pctNum = incomePct ? parseFloat(incomePct) : 0
-  const isPositive = pctNum >= 0
+  const savings = data?.currentMonth.savings ?? 0
+  const isPositive = savings >= 0
 
   return (
     <motion.div
@@ -139,11 +158,9 @@ function NetWorthHero({ data, incomePct }: { data?: DashboardData; incomePct: st
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
             }}>
-              Tài sản ròng
+              Net worth
             </div>
-            {incomePct !== null && (
-              <PctBadge pctChange={incomePct} isGood={isPositive} />
-            )}
+            <StatusBadge label={isPositive ? 'MTD positive' : 'MTD negative'} isGood={isPositive} />
           </div>
         </div>
 
@@ -165,7 +182,7 @@ function NetWorthHero({ data, incomePct }: { data?: DashboardData; incomePct: st
           color: 'var(--text-secondary)',
           marginTop: 'var(--space-2)',
         }}>
-          {new Date().toLocaleDateString('vi-VN', { month: 'long', year: 'numeric' })}
+          {new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
         </div>
       </div>
     </motion.div>
@@ -212,7 +229,7 @@ export function KPICards({ data, isLoading, incomePct, expensePct }: KPICardsPro
 
   const kpis: KPIItem[] = [
     {
-      label: 'Tổng thu nhập',
+      label: 'Total income',
       value: data?.currentMonth.income ?? 0,
       color: 'var(--accent-green)',
       glowClass: 'card-glow-green',
@@ -221,7 +238,7 @@ export function KPICards({ data, isLoading, incomePct, expensePct }: KPICardsPro
       pctPositiveIsGood: true,
     },
     {
-      label: 'Tổng chi tiêu',
+      label: 'Total expense',
       value: data?.currentMonth.expense ?? 0,
       color: 'var(--accent-red)',
       glowClass: 'card-glow-red',
@@ -230,7 +247,7 @@ export function KPICards({ data, isLoading, incomePct, expensePct }: KPICardsPro
       pctPositiveIsGood: false,
     },
     {
-      label: 'Tỷ lệ tiết kiệm',
+      label: 'Savings rate',
       value: savingsRate,
       color: 'var(--accent-purple)',
       glowClass: 'card-glow-purple',
@@ -244,7 +261,7 @@ export function KPICards({ data, isLoading, incomePct, expensePct }: KPICardsPro
   return (
     <div className="kpi-grid">
       <div className="kpi-hero-slot">
-        <NetWorthHero data={data} incomePct={incomePct} />
+        <NetWorthHero data={data} />
       </div>
       {kpis.map((kpi, i) => <KPICard key={i} item={kpi} index={i + 1} />)}
 

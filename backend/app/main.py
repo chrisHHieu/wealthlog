@@ -1,20 +1,22 @@
 import asyncio
-from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from time import perf_counter
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.ai.memory.decay import decay_old_facts, purge_expired_facts
 from app.config import settings
 from app.database import async_session
-from app.logging_config import get_logger, setup_logging
-from app.services.seed import seed
+from app.logging_config import get_logger, reset_request_id, set_request_id, setup_logging
 from app.routers import (
     accounts,
     budgets,
     categories,
     chat,
+    chat_sessions,
     dashboard,
     digest,
     goals,
@@ -23,9 +25,12 @@ from app.routers import (
     onboard,
     recurring,
     reports,
-    settings as settings_router,
     transactions,
 )
+from app.routers import (
+    settings as settings_router,
+)
+from app.services.seed import seed
 
 logger = get_logger(__name__)
 
@@ -101,8 +106,43 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def request_context_middleware(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or uuid4().hex
+    token = set_request_id(request_id)
+    started = perf_counter()
+    try:
+        response = await call_next(request)
+        duration_ms = round((perf_counter() - started) * 1000, 2)
+        response.headers["X-Request-ID"] = request_id
+        logger.info(
+            "HTTP request completed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "status_code": response.status_code,
+                "duration_ms": duration_ms,
+            },
+        )
+        return response
+    except Exception:
+        duration_ms = round((perf_counter() - started) * 1000, 2)
+        logger.exception(
+            "HTTP request failed",
+            extra={
+                "method": request.method,
+                "path": request.url.path,
+                "duration_ms": duration_ms,
+            },
+        )
+        raise
+    finally:
+        reset_request_id(token)
+
+
 # Register routers
 app.include_router(chat.router)
+app.include_router(chat_sessions.router)
 app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)

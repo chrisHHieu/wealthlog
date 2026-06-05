@@ -8,7 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { Plus, ChevronLeft, ChevronRight, Target, Trash2, Edit2 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { formatVND, formatVNDCompact, formatMonthVI, getCurrentMonth, getDaysRemaining, parseShorthandAmount, formatAmountLive } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
@@ -71,18 +71,21 @@ export function BudgetPage() {
   const [saving, setSaving] = useState(false)
 
   const { data: budgets = [] } = useQuery<BudgetItem[]>({
-    queryKey: ['budgets', month],
-    queryFn: () => fetch(`${API_URL}/api/budgets?month=${month}`).then(r => r.json()),
+    queryKey: queryKeys.budget(month),
+    queryFn: () => apiGet<BudgetItem[]>('/api/budgets', { month }),
   })
 
   const { data: transactions = [] } = useQuery<Transaction[]>({
-    queryKey: ['transactions', '', '', ''],
-    queryFn: () => fetch(`${API_URL}/api/transactions?startDate=${month}-01&endDate=${month}-31`).then(r => r.json()),
+    queryKey: ['transactions', 'budget', month],
+    queryFn: () => apiGet<Transaction[]>('/api/transactions', {
+      startDate: `${month}-01`,
+      endDate: `${month}-31`,
+    }),
   })
 
   const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories'],
-    queryFn: () => fetch(`${API_URL}/api/categories`).then(r => r.json()),
+    queryKey: queryKeys.categories(),
+    queryFn: () => apiGet<Category[]>('/api/categories'),
   })
 
   // Calculate spending per category this month
@@ -105,8 +108,8 @@ export function BudgetPage() {
 
   const chartData = budgetsWithSpent.map(b => ({
     name: `${b.categoryIcon} ${b.categoryName}`,
-    'Ngân sách': b.amount,
-    'Đã chi': b.spent,
+    'Budget': b.amount,
+    'Spent': b.spent,
   }))
 
   const expenseCategories = categories.filter(c => c.type === 'expense' || c.type === 'both')
@@ -116,13 +119,12 @@ export function BudgetPage() {
     if (!formCategoryId || !formAmount) return
     setSaving(true)
     try {
-      await fetch(`${API_URL}/api/budgets`, {
+      await apiJson('/api/budgets', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ categoryId: formCategoryId, amount: parseShorthandAmount(formAmount) || 0, month }),
+        body: { categoryId: formCategoryId, amount: parseShorthandAmount(formAmount) || 0, month },
       })
       await qc.invalidateQueries({ queryKey: ['budgets'] })
-      toast('Đã thiết lập ngân sách')
+      toast('Budget set')
       setShowForm(false)
       setFormAmount('')
       setFormCategoryId('')
@@ -132,9 +134,9 @@ export function BudgetPage() {
   }
 
   async function handleDelete(id: string) {
-    await fetch(`${API_URL}/api/budgets?id=${id}`, { method: 'DELETE' })
+    await apiDelete(`/api/budgets?id=${id}`)
     await qc.invalidateQueries({ queryKey: ['budgets'] })
-    toast('Đã xóa ngân sách')
+    toast('Budget deleted')
   }
 
   return (
@@ -143,7 +145,7 @@ export function BudgetPage() {
       {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
         <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Ngân sách</h1>
+          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Budget</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
             <button onClick={() => setMonth(prevMonth(month))} className="btn btn-ghost btn-sm" style={{ padding: '2px 6px' }}>
               <ChevronLeft size={16} />
@@ -158,27 +160,27 @@ export function BudgetPage() {
               <ChevronRight size={16} />
             </button>
             {isCurrentMonth && (
-              <span style={{ fontSize: 12, color: 'var(--accent-yellow)' }}>🕒 Còn {daysLeft} ngày</span>
+              <span style={{ fontSize: 12, color: 'var(--accent-yellow)' }}>🕒 Left {daysLeft} days</span>
             )}
           </div>
         </div>
         <button id="add-budget-btn" onClick={() => setShowForm(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={15} /> Thiết lập ngân sách
+          <Plus size={15} /> Set budget
         </button>
       </div>
 
       {/* Summary */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
+      <div className="budget-summary-grid">
         <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Tổng ngân sách</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total budget</div>
           <div style={{ fontSize: 22, fontWeight: 700 }}>{formatVNDCompact(totalBudget)}</div>
         </div>
         <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Đã chi tiêu</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Spent</div>
           <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-red)' }}>{formatVNDCompact(totalSpent)}</div>
         </div>
         <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Còn lại</div>
+          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Remaining</div>
           <div style={{
             fontSize: 22, fontWeight: 700,
             color: totalBudget - totalSpent >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'
@@ -223,10 +225,10 @@ export function BudgetPage() {
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 2 }}>
-                    🚨 Vượt ngân sách {b.categoryName}!
+                    🚨 Budget exceeded {b.categoryName}!
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Đã chi {formatVND(b.spent)} / {formatVND(b.amount)} — vượt {formatVND(b.spent - b.amount)}
+                    Spent {formatVND(b.spent)} / {formatVND(b.amount)} — over {formatVND(b.spent - b.amount)}
                   </div>
                 </div>
                 <div style={{
@@ -264,10 +266,10 @@ export function BudgetPage() {
                   </div>
                   <div style={{ flex: 1 }}>
                     <div style={{ fontSize: 13, fontWeight: 600, color: '#f97316', marginBottom: 2 }}>
-                      ⚡ Sắp hết ngân sách {b.categoryName}
+                      ⚡ Budget almost used {b.categoryName}
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Còn {formatVND(b.amount - b.spent)} — đã chi {pct}%
+                      Left {formatVND(b.amount - b.spent)} - spent {pct}%
                     </div>
                   </div>
                   <div style={{
@@ -287,17 +289,17 @@ export function BudgetPage() {
       {budgetsWithSpent.length === 0 ? (
         <div className="empty-state card" style={{ padding: '48px 24px' }}>
           <span style={{ fontSize: 48 }}>📊</span>
-          <p style={{ fontSize: 15, fontWeight: 600 }}>Chưa có ngân sách nào</p>
-          <p style={{ fontSize: 13 }}>Thiết lập ngân sách để theo dõi chi tiêu</p>
+          <p style={{ fontSize: 15, fontWeight: 600 }}>No budgets yet</p>
+          <p style={{ fontSize: 13 }}>Set budgets to track spending</p>
           <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ marginTop: 8 }}>
-            <Plus size={15} /> Thiết lập ngân sách
+            <Plus size={15} /> Set budget
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 24 }}>
+        <div className="budget-content-grid">
           {/* Budget List */}
           <div className="card" style={{ padding: '20px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Chi tiết theo danh mục</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Expense details by category</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {budgetsWithSpent.map(b => {
                 const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0
@@ -333,7 +335,7 @@ export function BudgetPage() {
                         </div>
                         <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }}>
                           <span>{formatVND(b.spent)} / {formatVND(b.amount)}</span>
-                          <span style={{ color: color }}>còn {formatVND(Math.max(0, b.amount - b.spent))}</span>
+                          <span style={{ color: color }}>left {formatVND(Math.max(0, b.amount - b.spent))}</span>
                         </div>
                         <div className="progress-bar">
                           <motion.div
@@ -359,7 +361,7 @@ export function BudgetPage() {
 
           {/* Bar Chart */}
           <div className="card" style={{ padding: '20px', height: '100%' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>So sánh ngân sách vs thực chi</div>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Budget vs actual spending</div>
             <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 60)}>
               <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }} barGap={4} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
@@ -367,12 +369,12 @@ export function BudgetPage() {
                 <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={200} />
                 <Tooltip
                   cursor={{ fill: 'transparent' }}
-                  formatter={(v: any, name: any) => [formatVND(v ?? 0), name]}
+                  formatter={(v, name) => [formatVND(Number(v ?? 0)), String(name)]}
                   contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--surface-border)', borderRadius: 8, fontSize: 12 }}
                 />
                 <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Ngân sách" fill="rgba(61,142,248,0.6)" radius={[0, 4, 4, 0]} maxBarSize={20} />
-                <Bar dataKey="Đã chi" fill="rgba(255,77,109,0.8)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                <Bar dataKey="Budget" fill="rgba(61,142,248,0.6)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                <Bar dataKey="Spent" fill="rgba(255,77,109,0.8)" radius={[0, 4, 4, 0]} maxBarSize={20} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -386,34 +388,34 @@ export function BudgetPage() {
           <>
             <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowForm(false)} />
             <motion.div className="modal" style={{ padding: '28px' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <h3 style={{ fontSize: 17, fontWeight: 600, marginBottom: 20 }}>Thiết lập ngân sách — {formatMonthVI(month)}</h3>
+              <h3 style={{ fontSize: 17, fontWeight: 600, marginBottom: 20 }}>Set budget — {formatMonthVI(month)}</h3>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <div style={{ zIndex: 10 }}>
-                  <label className="label">Danh mục</label>
+                  <label className="label">Category</label>
                   <Select
                     value={formCategoryId}
                     onChange={setFormCategoryId}
-                    placeholder="Chọn danh mục..."
+                    placeholder="Select category..."
                     options={[
-                      { value: '', label: 'Chọn danh mục...' },
+                      { value: '', label: 'Select category...' },
                       ...expenseCategories.map(c => ({
                         value: c.id,
-                        label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{c.icon} {c.name} <span style={{color: 'var(--text-tertiary)'}}>{setBudgetCategories.has(c.id) ? '(đã có ngân sách)' : ''}</span></span>
+                        label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{c.icon} {c.name} <span style={{color: 'var(--text-tertiary)'}}>{setBudgetCategories.has(c.id) ? '(budget already set)' : ''}</span></span>
                       }))
                     ]}
                   />
                 </div>
                 <div>
-                  <label className="label">Ngân sách (đ)</label>
-                  <input type="text" value={formAmount} onChange={e => setFormAmount(formatAmountLive(e.target.value))} placeholder="VD: 3000000" className="input" />
+                  <label className="label">Budget (VND)</label>
+                  <input type="text" value={formAmount} onChange={e => setFormAmount(formatAmountLive(e.target.value))} placeholder="Example: 3,000,000" className="input" />
                 </div>
               </div>
 
               <div style={{ display: 'flex', gap: 10, marginTop: 24 }}>
-                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowForm(false)}>Hủy</button>
+                <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setShowForm(false)}>Cancel</button>
                 <button className="btn btn-primary" style={{ flex: 2 }} onClick={handleSave} disabled={saving || !formCategoryId || !formAmount}>
-                  {saving ? 'Đang lưu...' : 'Thiết lập ngân sách'}
+                  {saving ? 'Saving...' : 'Set budget'}
                 </button>
               </div>
             </motion.div>
@@ -421,6 +423,26 @@ export function BudgetPage() {
         )}
       </AnimatePresence>
       </Portal>
+      <style jsx>{`
+        .budget-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+          gap: 16px;
+          margin-bottom: 24px;
+        }
+
+        .budget-content-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+          gap: 24px;
+        }
+
+        @media (max-width: 1180px) {
+          .budget-content-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
     </div>
     </PageTransition>
   )

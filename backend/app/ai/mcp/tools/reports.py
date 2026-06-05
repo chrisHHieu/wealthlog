@@ -53,10 +53,18 @@ def register(mcp: FastMCP) -> None:
                 )
             ).all()
 
-            cur_income = sum(r.amount for r in rows if r.date.startswith(m) and r.type == "income")
-            cur_expense = sum(r.amount for r in rows if r.date.startswith(m) and r.type == "expense")
-            prev_income = sum(r.amount for r in rows if r.date.startswith(pm) and r.type == "income")
-            prev_expense = sum(r.amount for r in rows if r.date.startswith(pm) and r.type == "expense")
+            cur_income = sum(
+                r.amount for r in rows if r.date.startswith(m) and r.type == "income"
+            )
+            cur_expense = sum(
+                r.amount for r in rows if r.date.startswith(m) and r.type == "expense"
+            )
+            prev_income = sum(
+                r.amount for r in rows if r.date.startswith(pm) and r.type == "income"
+            )
+            prev_expense = sum(
+                r.amount for r in rows if r.date.startswith(pm) and r.type == "expense"
+            )
 
             cur_savings = cur_income - cur_expense
             prev_savings = prev_income - prev_expense
@@ -199,7 +207,8 @@ def register(mcp: FastMCP) -> None:
                 f = _FREQ_LABELS.get(freq_key, "")
                 cat = r.cat_name or ""
                 lines.append(
-                    f"- [{r.next_run_date}] {r.description}: {r.amount:,.0f} VND ({t}) | {f} | {cat}"
+                    f"- [{r.next_run_date}] {r.description}: "
+                    f"{r.amount:,.0f} VND ({t}) | {f} | {cat}"
                 )
             return "\n".join(lines)
 

@@ -12,10 +12,10 @@ import {
 import { cn } from '@/lib/utils'
 
 const MOBILE_NAV_ITEMS = [
-  { href: '/', icon: LayoutDashboard, label: 'Tổng quan' },
-  { href: '/transactions', icon: ArrowLeftRight, label: 'Giao dịch' },
-  { href: '/accounts', icon: Wallet, label: 'Tài khoản' },
-  { href: '/budget', icon: PiggyBank, label: 'Ngân sách' },
+  { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
+  { href: '/accounts', icon: Wallet, label: 'Accounts' },
+  { href: '/budget', icon: PiggyBank, label: 'Budget' },
 ]
 
 export function MobileNav() {

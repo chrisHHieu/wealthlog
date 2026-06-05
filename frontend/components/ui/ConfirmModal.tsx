@@ -16,7 +16,7 @@ interface ConfirmModalProps {
 export function ConfirmModal({
   isOpen, onClose, onConfirm,
   title, description, icon = '⚠️',
-  confirmText = 'Xác nhận', cancelText = 'Hủy',
+  confirmText = 'Confirm', cancelText = 'Cancel',
   variant = 'danger'
 }: ConfirmModalProps) {
   return (

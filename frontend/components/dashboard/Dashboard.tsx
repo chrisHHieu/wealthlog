@@ -9,8 +9,11 @@ import { GoalsSnapshot } from './components/GoalsSnapshot'
 import { UpcomingBills } from './components/UpcomingBills'
 import { RecentTransactions } from './components/RecentTransactions'
 import { AssetLiability } from './components/AssetLiability'
+import { DashboardSummary } from './components/DashboardSummary'
+import { DashboardActionCenter } from './components/DashboardActionCenter'
 import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
 import { ScrollReveal } from '@/components/ui/ScrollReveal'
+import { buildDashboardInsights } from './dashboardInsights'
 
 function getCurrentMonthStr() {
   const now = new Date()
@@ -20,6 +23,7 @@ function getCurrentMonthStr() {
 export function Dashboard() {
   const selectedMonth = getCurrentMonthStr()
   const { data, isLoading, activeGoals, stats } = useDashboard('12months', selectedMonth)
+  const insights = buildDashboardInsights(data)
 
   return (
     <PageTransition>
@@ -33,6 +37,13 @@ export function Dashboard() {
             expensePct={stats.expensePct}
           />
         </StaggerItem>
+
+        <ScrollReveal>
+          <div className="dashboard-summary-row">
+            <DashboardSummary data={data} insights={insights} isLoading={isLoading} />
+            <DashboardActionCenter insights={insights} isLoading={isLoading} />
+          </div>
+        </ScrollReveal>
 
         {/* Row 2: Cash Flow (3fr) + Spending Donut (2fr) */}
         <ScrollReveal>
@@ -71,8 +82,16 @@ export function Dashboard() {
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: var(--space-5);
         }
-        @media (max-width: 1023px) {
+        .dashboard-summary-row {
+          display: grid;
+          grid-template-columns: minmax(0, 1.6fr) minmax(320px, 0.7fr);
+          gap: var(--space-5);
+        }
+        @media (max-width: 1280px) {
           .dashboard-row-2 {
+            grid-template-columns: 1fr;
+          }
+          .dashboard-summary-row {
             grid-template-columns: 1fr;
           }
           .dashboard-row-3 {

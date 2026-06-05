@@ -13,7 +13,7 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-5)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Mục tiêu tài chính</div>
+        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Financial goals</div>
         <Link href="/goals" className="btn btn-ghost btn-sm" style={{ padding: 'var(--space-1)' }}>
           <Plus size={16} />
         </Link>
@@ -26,9 +26,9 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
       ) : goals.length === 0 ? (
         <div className="empty-state" style={{ flex: 1, padding: 'var(--space-6) var(--space-3)' }}>
           <span style={{ fontSize: 32 }}>🎯</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>Chưa có mục tiêu nào</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>No goals yet</span>
           <Link href="/goals" className="btn btn-primary btn-sm" style={{ marginTop: 'var(--space-2)' }}>
-            Tạo mục tiêu đầu tiên
+            Create your first goal
           </Link>
         </div>
       ) : (
@@ -61,7 +61,7 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
                   </span>
                 </div>
                 <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1-5)' }}>
-                  Đã đạt {formatVNDCompact(goal.currentAmount)} / {formatVNDCompact(goal.targetAmount)}
+                  Reached {formatVNDCompact(goal.currentAmount)} / {formatVNDCompact(goal.targetAmount)}
                 </div>
                 <div className="progress-bar">
                   <motion.div

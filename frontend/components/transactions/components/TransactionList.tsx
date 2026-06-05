@@ -42,10 +42,10 @@ export function TransactionList({ transactions, isLoading, onAdd, onSelect, onEd
     return (
       <div className="empty-state card" style={{ padding: 'var(--space-12) var(--space-6)' }}>
         <span style={{ fontSize: 48 }}>💸</span>
-        <p style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>Chưa có giao dịch nào</p>
-        <p style={{ fontSize: 'var(--text-sm)' }}>Thêm giao dịch đầu tiên của bạn</p>
+        <p style={{ fontSize: 'var(--text-base)', fontWeight: 600, color: 'var(--text-primary)' }}>No transactions yet</p>
+        <p style={{ fontSize: 'var(--text-sm)' }}>Add your first transaction</p>
         <button className="btn btn-primary" onClick={onAdd} style={{ marginTop: 'var(--space-2)' }}>
-          <Plus size={15} /> Thêm giao dịch
+          <Plus size={15} /> Add transaction
         </button>
       </div>
     )
@@ -126,7 +126,7 @@ export function TransactionList({ transactions, isLoading, onAdd, onSelect, onEd
                       color: 'var(--text-tertiary)',
                       marginTop: 2,
                     }}>
-                      {tx.categoryName ?? 'Không phân loại'}
+                      {tx.categoryName ?? 'Uncategorized'}
                       {tx.accountName && ` · ${tx.accountIcon ?? ''} ${tx.accountName}`}
                     </div>
                   </div>
@@ -147,7 +147,7 @@ export function TransactionList({ transactions, isLoading, onAdd, onSelect, onEd
                       onClick={() => onEdit(tx.id)}
                       className="btn-icon"
                       style={{ width: 28, height: 28, borderRadius: 'var(--radius-full)', border: 'none', background: 'transparent' }}
-                      title="Sửa"
+                      title="Edit"
                     >
                       <Edit2 size={13} />
                     </button>
@@ -155,7 +155,7 @@ export function TransactionList({ transactions, isLoading, onAdd, onSelect, onEd
                       onClick={() => onDelete(tx.id)}
                       className="btn-icon"
                       style={{ width: 28, height: 28, borderRadius: 'var(--radius-full)', border: 'none', background: 'transparent', color: 'var(--accent-red)' }}
-                      title="Xóa"
+                      title="Delete"
                     >
                       <Trash2 size={13} />
                     </button>

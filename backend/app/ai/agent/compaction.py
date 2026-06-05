@@ -198,11 +198,11 @@ def _cap_oversized_turn(
 
 def _compact_history(
     messages: list[dict],
-    max_turns: int,
-    keep_recent_turns: int,
-    old_tool_result_chars: int,
-    recent_turn_max_chars: int,
-) -> tuple[list[dict], int]:
+    max_turns: int | None = None,
+    keep_recent_turns: int = 3,
+    old_tool_result_chars: int = 300,
+    recent_turn_max_chars: int = 20_000,
+) -> tuple[list[dict], int] | list[dict]:
     """Apply 3-tier compaction; return (compacted_messages, dropped_turn_count).
 
     - Oldest turns beyond ``max_turns`` are dropped entirely; a bilingual
@@ -217,6 +217,8 @@ def _compact_history(
     The dropped count is returned so callers can trigger a mid-session summary
     before the content is gone from the conversation forever.
     """
+    legacy_list_return = max_turns is None
+    max_turns = max_turns or 20
     turns = _split_turns(messages)
     n = len(turns)
 
@@ -228,7 +230,7 @@ def _compact_history(
             out.extend(_cap_oversized_turn(
                 turn, recent_turn_max_chars, old_tool_result_chars,
             ))
-        return out, 0
+        return out if legacy_list_return else (out, 0)
 
     recent_start = n - keep_recent_turns
     middle_start = max(0, n - max_turns)
@@ -252,4 +254,4 @@ def _compact_history(
         "History compacted: %d turns → dropped=%d middle=%d recent=%d",
         n, dropped, len(middle), len(recent),
     )
-    return compacted, dropped
+    return compacted if legacy_list_return else (compacted, dropped)

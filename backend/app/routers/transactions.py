@@ -3,15 +3,17 @@
 import math
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func, select, update
+from fastapi import APIRouter, Depends, Query
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api_errors import not_found, validation_error
 from app.database import get_db
+from app.domain.balance import apply_balance, reverse_balance
 from app.logging_config import get_logger
 from app.models.account import Account
 from app.models.category import Category
-from app.models.transaction import Transaction
+from app.models.transaction import Transaction, TransactionType
 from app.schemas.finance.transaction import (
     TransactionCreate,
     TransactionResponse,
@@ -21,6 +23,27 @@ from app.services.recurring_sync import process_recurring
 
 logger = get_logger(__name__)
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
+
+
+def _type_value(tx_type: TransactionType | str) -> str:
+    return tx_type.value if hasattr(tx_type, "value") else str(tx_type)
+
+
+def _validate_balance_contract(
+    tx_type: TransactionType | str,
+    account_id: uuid.UUID,
+    to_account_id: uuid.UUID | None,
+) -> None:
+    type_value = _type_value(tx_type)
+    if type_value == "transfer":
+        if to_account_id is None:
+            raise validation_error("Transfer requires toAccountId")
+        if to_account_id == account_id:
+            raise validation_error("Transfer source and destination accounts must be different")
+        return
+
+    if to_account_id is not None:
+        raise validation_error("toAccountId is only allowed for transfer transactions")
 
 
 def _build_filters(
@@ -131,11 +154,12 @@ async def create_transaction(
     body: TransactionCreate,
     db: AsyncSession = Depends(get_db),
 ) -> Transaction:
+    _validate_balance_contract(body.type, body.account_id, body.to_account_id)
     tx = Transaction(**body.model_dump())
     db.add(tx)
     await db.flush()
 
-    await _apply_balance(db, body.type.value, body.amount, body.account_id, body.to_account_id)
+    await apply_balance(db, body.type.value, body.amount, body.account_id, body.to_account_id)
     logger.info("Created transaction %s %s %.2f", tx.type.value, tx.date, tx.amount)
     return tx
 
@@ -147,7 +171,7 @@ async def get_transaction(
 ) -> Transaction:
     tx = await db.get(Transaction, transaction_id)
     if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise not_found("Transaction")
     return tx
 
 
@@ -159,17 +183,27 @@ async def update_transaction(
 ) -> Transaction:
     tx = await db.get(Transaction, transaction_id)
     if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise not_found("Transaction")
 
-    # Reverse old balance
-    await _reverse_balance(db, tx.type.value, tx.amount, tx.account_id, tx.to_account_id)
+    update_data = body.model_dump(exclude_unset=True)
+    new_type = update_data.get("type", tx.type)
+    new_account_id = update_data.get("account_id", tx.account_id)
+    new_to_account_id = update_data.get("to_account_id", tx.to_account_id)
+    if _type_value(new_type) != "transfer" and "to_account_id" not in update_data:
+        new_to_account_id = None
 
-    for field, value in body.model_dump(exclude_unset=True).items():
+    _validate_balance_contract(new_type, new_account_id, new_to_account_id)
+
+    old_type = tx.type.value
+    await reverse_balance(db, old_type, tx.amount, tx.account_id, tx.to_account_id)
+
+    for field, value in update_data.items():
         setattr(tx, field, value)
+    if _type_value(tx.type) != "transfer":
+        tx.to_account_id = None
     await db.flush()
 
-    # Apply new balance
-    await _apply_balance(db, tx.type.value, tx.amount, tx.account_id, tx.to_account_id)
+    await apply_balance(db, _type_value(tx.type), tx.amount, tx.account_id, tx.to_account_id)
     await db.refresh(tx)
     logger.info("Updated transaction %s", transaction_id)
     return tx
@@ -182,47 +216,10 @@ async def delete_transaction(
 ) -> dict[str, bool]:
     tx = await db.get(Transaction, transaction_id)
     if not tx:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise not_found("Transaction")
 
-    await _reverse_balance(db, tx.type.value, tx.amount, tx.account_id, tx.to_account_id)
+    await reverse_balance(db, tx.type.value, tx.amount, tx.account_id, tx.to_account_id)
     await db.delete(tx)
     await db.flush()
     logger.info("Deleted transaction %s", transaction_id)
     return {"success": True}
-
-
-# ── Balance helpers ──────────────────────────────────────────────
-
-
-async def _adjust_balance(db: AsyncSession, account_id: uuid.UUID, delta: float) -> None:
-    await db.execute(
-        update(Account)
-        .where(Account.id == account_id)
-        .values(balance=Account.balance + delta)
-    )
-
-
-async def _apply_balance(
-    db: AsyncSession, tx_type: str, amount: float,
-    account_id: uuid.UUID, to_account_id: uuid.UUID | None,
-) -> None:
-    if tx_type == "income":
-        await _adjust_balance(db, account_id, amount)
-    elif tx_type == "expense":
-        await _adjust_balance(db, account_id, -amount)
-    elif tx_type == "transfer" and to_account_id:
-        await _adjust_balance(db, account_id, -amount)
-        await _adjust_balance(db, to_account_id, amount)
-
-
-async def _reverse_balance(
-    db: AsyncSession, tx_type: str, amount: float,
-    account_id: uuid.UUID, to_account_id: uuid.UUID | None,
-) -> None:
-    if tx_type == "income":
-        await _adjust_balance(db, account_id, -amount)
-    elif tx_type == "expense":
-        await _adjust_balance(db, account_id, amount)
-    elif tx_type == "transfer" and to_account_id:
-        await _adjust_balance(db, account_id, amount)
-        await _adjust_balance(db, to_account_id, -amount)

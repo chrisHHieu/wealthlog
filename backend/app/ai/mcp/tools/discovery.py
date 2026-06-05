@@ -67,10 +67,13 @@ def _is_read_only(sql: str) -> bool:
     # Set intersection over whole tokens — `CREATE` matches `CREATE`, never
     # `CREATED_AT`. Statement-chaining attacks ("SELECT 1; DROP TABLE x") still
     # get caught because the second statement's keywords tokenize separately.
-    if tokens & _BLOCKED_KEYWORDS:
-        return False
-    # Block queries that reference internal/AI-state tables.
-    return not (tokens & _BLOCKED_TABLES)
+    return not (tokens & _BLOCKED_KEYWORDS)
+
+
+def _blocked_table_refs(sql: str) -> set[str]:
+    """Return internal table tokens referenced by a syntactically read-only query."""
+    normalized = _strip_comments(sql).strip().upper()
+    return set(_WORD_RE.findall(normalized)) & _BLOCKED_TABLES
 
 
 async def build_schema_summary() -> str:
@@ -190,12 +193,12 @@ def register(mcp: FastMCP) -> None:
         - ROUND(double, int) does NOT exist → cast: ROUND(expr::numeric, 2).
         - Avoid format/round in SQL; return raw numbers and format in the reply."""
         if not _is_read_only(sql):
-            normalized_check = _strip_comments(sql).strip().upper()
-            tokens_check = set(_WORD_RE.findall(normalized_check))
-            if tokens_check & _BLOCKED_TABLES:
-                blocked = tokens_check & _BLOCKED_TABLES
-                return f"Error: querying internal tables is not allowed ({', '.join(sorted(blocked)).lower()})."
             return "Error: only SELECT (read-only) statements are allowed."
+        if blocked := _blocked_table_refs(sql):
+            return (
+                "Error: querying internal tables is not allowed "
+                f"({', '.join(sorted(blocked)).lower()})."
+            )
 
         normalized = sql.strip().rstrip(";")
         if "LIMIT" not in normalized.upper():

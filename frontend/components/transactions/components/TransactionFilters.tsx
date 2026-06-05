@@ -49,64 +49,84 @@ export function TransactionFilters({ filters, accounts, categories }: Transactio
           type="text"
           value={search}
           onChange={e => handleSearchChange(e.target.value)}
-          placeholder="Tìm kiếm giao dịch (Mô tả, ghi chú)..."
+          placeholder="Search transactions (description, note)..."
           className="input"
           style={{ paddingLeft: 40, height: 44, fontSize: 14, borderRadius: 12 }}
         />
       </div>
 
       {/* Bottom row: Compact Filters */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      <div className="transaction-filter-grid">
 
       {/* Dropdowns */}
-      <div style={{ zIndex: 10 }}>
+      <div style={{ zIndex: 10, minWidth: 0 }}>
         <Select
           value={typeFilter}
           onChange={handleTypeChange}
-          placeholder="Tất cả loại"
+          placeholder="All types"
           minWidth={130}
           options={[
-            { value: '', label: 'Tất cả loại' },
-            { value: 'income', label: 'Thu nhập' },
-            { value: 'expense', label: 'Chi tiêu' },
-            { value: 'transfer', label: 'Chuyển khoản' },
+            { value: '', label: 'All types' },
+            { value: 'income', label: 'Income' },
+            { value: 'expense', label: 'Expense' },
+            { value: 'transfer', label: 'Transfer' },
           ]}
         />
       </div>
 
-      <div style={{ zIndex: 9 }}>
+      <div style={{ zIndex: 9, minWidth: 0 }}>
         <Select
           value={accountFilter}
           onChange={handleAccountChange}
-          placeholder="Tất cả tài khoản"
+          placeholder="All accounts"
           minWidth={160}
           options={[
-            { value: '', label: 'Tất cả tài khoản' },
+            { value: '', label: 'All accounts' },
             ...accounts.map(a => ({ value: a.id, label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{a.icon} {a.name}</span> }))
           ]}
         />
       </div>
 
-      <div style={{ zIndex: 8 }}>
+      <div style={{ zIndex: 8, minWidth: 0 }}>
         <Select
           value={categoryFilter}
           onChange={handleCategoryChange}
-          placeholder="Tất cả danh mục"
+          placeholder="All categories"
           minWidth={160}
           options={[
-            { value: '', label: 'Tất cả danh mục' },
+            { value: '', label: 'All categories' },
             ...categories.map(c => ({ value: c.id, label: <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>{c.icon} {c.name}</span> }))
           ]}
         />
       </div>
 
-      <div style={{ zIndex: 11 }}>
+      <div style={{ zIndex: 11, minWidth: 0 }}>
         <MonthPicker
           value={selectedMonth}
           onChange={handleMonthChange}
         />
       </div>
     </div>
+    <style jsx>{`
+      .transaction-filter-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(150px, max-content));
+        gap: 8px;
+        align-items: start;
+      }
+
+      @media (max-width: 900px) {
+        .transaction-filter-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 520px) {
+        .transaction-filter-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    `}</style>
   </div>
   )
 }

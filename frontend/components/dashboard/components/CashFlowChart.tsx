@@ -4,22 +4,23 @@ import { formatVNDCompact, formatVND } from '@/lib/utils'
 import { DashboardData } from '@/types'
 import { Select } from '@/components/ui/Select'
 import { CHART_COLORS, AXIS_STYLE, GRID_STYLE } from '@/lib/chartTheme'
+import { ChartTooltipProps } from '@/types/chart'
 
 type Period = '6months' | '12months'
 
 const PERIOD_OPTIONS = [
-  { value: '6months', label: '6 tháng qua' },
-  { value: '12months', label: '12 tháng qua' },
+  { value: '6months', label: 'Last 6 months' },
+  { value: '12months', label: 'Last 12 months' },
 ]
 
-function ChartTooltip({ active, payload, label }: any) {
+function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
   if (!active || !payload?.length) return null
   return (
     <div className="chart-tooltip">
       <div style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 'var(--space-2)', fontSize: 'var(--text-sm)' }}>
         {label}
       </div>
-      {payload.map((p: any) => (
+      {payload.map((p) => (
         <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 3 }}>
           <div style={{
             width: 8,
@@ -29,7 +30,7 @@ function ChartTooltip({ active, payload, label }: any) {
             flexShrink: 0,
           }} />
           <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>{p.name}:</span>
-          <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}>{formatVND(p.value)}</strong>
+          <strong style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)' }}>{formatVND(Number(p.value ?? 0))}</strong>
         </div>
       ))}
     </div>
@@ -46,7 +47,7 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
 
   const allData = data?.monthlyChart.map(m => {
     const [, month] = m.month.split('-')
-    return { name: `T${Number(month)}`, 'Thu nhập': m.income, 'Chi tiêu': m.expense }
+    return { name: `${Number(month)}`, 'Income': m.income, 'Expense': m.expense }
   }) ?? []
 
   const chartData = period === '6months' ? allData.slice(-6) : allData
@@ -56,10 +57,10 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
         <div>
           <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
-            Xu hướng Thu - Chi
+            Income - Expense trend
           </div>
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 2 }}>
-            Dòng tiền hàng tháng của bạn
+            Your monthly cash flow
           </div>
         </div>
 
@@ -76,7 +77,7 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
       ) : chartData.length === 0 ? (
         <div className="empty-state" style={{ flex: 1 }}>
           <span style={{ fontSize: 32 }}>📊</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>Chưa có đủ dữ liệu</span>
+          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>Not enough data yet</span>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0 }}>
@@ -109,7 +110,7 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
               />
               <Tooltip cursor={{ fill: 'var(--surface)', radius: 8 }} content={<ChartTooltip />} />
               <Bar
-                dataKey="Thu nhập"
+                dataKey="Income"
                 fill="url(#barGradientGreen)"
                 radius={[6, 6, 0, 0]}
                 maxBarSize={32}
@@ -117,7 +118,7 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
                 animationEasing="ease-out"
               />
               <Bar
-                dataKey="Chi tiêu"
+                dataKey="Expense"
                 fill="url(#barGradientRed)"
                 radius={[6, 6, 0, 0]}
                 maxBarSize={32}

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { useAppStore } from '@/store/useAppStore'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import { Select } from '@/components/ui/Select'
 import { useMemoryFacts, useDeleteFact, useVerifyFact, UserFact } from '@/hooks/useMemoryFacts'
 
@@ -29,12 +29,12 @@ interface Digest {
 type SectionId = 'profile' | 'appearance' | 'memory' | 'digest' | 'categories' | 'about'
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; color: string }[] = [
-  { id: 'profile',    label: 'Cá nhân',       icon: User,      color: 'var(--accent-blue)' },
-  { id: 'appearance', label: 'Giao diện',      icon: Palette,   color: 'var(--accent-purple)' },
-  { id: 'memory',     label: 'Bộ nhớ AI',      icon: Brain,     color: 'var(--accent-purple)' },
-  { id: 'digest',     label: 'Báo cáo tháng',  icon: FileText,  color: 'var(--accent-green)' },
-  { id: 'categories', label: 'Danh mục',        icon: Tag,       color: 'var(--accent-gold)' },
-  { id: 'about',      label: 'Về ứng dụng',    icon: Info,      color: 'var(--text-secondary)' },
+  { id: 'profile',    label: 'Profile',       icon: User,      color: 'var(--accent-blue)' },
+  { id: 'appearance', label: 'Appearance',      icon: Palette,   color: 'var(--accent-purple)' },
+  { id: 'memory',     label: 'AI Memory',      icon: Brain,     color: 'var(--accent-purple)' },
+  { id: 'digest',     label: 'Monthly digest',  icon: FileText,  color: 'var(--accent-green)' },
+  { id: 'categories', label: 'Category',        icon: Tag,       color: 'var(--accent-gold)' },
+  { id: 'about',      label: 'About',    icon: Info,      color: 'var(--text-secondary)' },
 ]
 
 // ── Category constants ────────────────────────────────────────────────────────
@@ -53,9 +53,9 @@ const CAT_ICONS = [
 // ── Memory helpers ────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
-  preference:'Sở thích', habit:'Thói quen', goal:'Mục tiêu',
-  context:'Bối cảnh', pattern:'Hành vi', commitment:'Cam kết',
-  emotion:'Cảm xúc', general:'Chung',
+  preference:'Preferences', habit:'Habits', goal:'Goals',
+  context:'Context', pattern:'Patterns', commitment:'Commitments',
+  emotion:'Emotions', general:'General',
 }
 const CATEGORY_COLORS: Record<string, string> = {
   preference:'var(--accent-blue)', habit:'var(--accent-purple)',
@@ -133,31 +133,39 @@ export function SettingsPage() {
 
   // Queries
   const { data: settings } = useQuery<Record<string,string>>({
-    queryKey: ['settings'],
-    queryFn: () => fetch(`${API_URL}/api/settings`).then(r=>r.json()).then(r=>r.data??r),
+    queryKey: queryKeys.settings,
+    queryFn: async () => {
+      const response = await apiGet<unknown>('/api/settings')
+      if (
+        response &&
+        typeof response === 'object' &&
+        'data' in response &&
+        typeof (response as { data?: unknown }).data === 'object'
+      ) {
+        return (response as { data: Record<string,string> }).data
+      }
+      return (response ?? {}) as Record<string,string>
+    },
   })
   const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories'],
-    queryFn: () => fetch(`${API_URL}/api/categories`).then(r=>r.json()),
+    queryKey: queryKeys.categories(),
+    queryFn: () => apiGet<Category[]>('/api/categories'),
   })
   const { data: latestDigest, isLoading: digestLoading } = useQuery<Digest|null>({
-    queryKey: ['digest-latest'],
-    queryFn: () => fetch(`${API_URL}/api/digest/latest`).then(r=>r.json()),
+    queryKey: queryKeys.digest,
+    queryFn: () => apiGet<Digest|null>('/api/digest/latest'),
   })
   const { data: facts = [], isLoading: factsLoading } = useMemoryFacts()
   const deleteFact = useDeleteFact()
   const verifyFact = useVerifyFact()
 
   const generateDigest = useMutation({
-    mutationFn: () => fetch(`${API_URL}/api/digest/generate`,{method:'POST'}).then(r=>{
-      if (!r.ok) throw new Error('Lỗi tạo báo cáo')
-      return r.json()
-    }),
+    mutationFn: () => apiJson('/api/digest/generate',{method:'POST'}),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['digest-latest'] })
-      toast('Đã tạo báo cáo mới')
+      qc.invalidateQueries({ queryKey: queryKeys.digest })
+      toast('New digest generated')
     },
-    onError: () => toast('Lỗi khi tạo báo cáo — thử lại sau'),
+    onError: () => toast('Unable to generate digest - please try again later'),
   })
 
   useEffect(() => {
@@ -169,12 +177,12 @@ export function SettingsPage() {
   async function saveProfile() {
     setSaving(true)
     try {
-      await fetch(`${API_URL}/api/settings`,{
-        method:'PUT', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({ data:{ userName } }),
+      await apiJson('/api/settings',{
+        method:'PUT',
+        body: { data:{ userName } },
       })
-      await qc.invalidateQueries({ queryKey:['settings'] })
-      toast('Đã lưu thông tin cá nhân')
+      await qc.invalidateQueries({ queryKey: queryKeys.settings })
+      toast('Profile saved')
     } finally { setSaving(false) }
   }
 
@@ -182,13 +190,13 @@ export function SettingsPage() {
     if (!catName.trim()) return
     const payload = { name:catName, type:catType, budgetGroup:catBudgetGroup||null, icon:catIcon, color:catColor }
     if (editCat) {
-      await fetch(`${API_URL}/api/categories`,{ method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({id:editCat.id,...payload}) })
-      toast('Đã cập nhật danh mục')
+      await apiJson('/api/categories',{ method:'PUT', body:{id:editCat.id,...payload} })
+      toast('Category updated')
     } else {
-      await fetch(`${API_URL}/api/categories`,{ method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
-      toast('Đã thêm danh mục')
+      await apiJson('/api/categories',{ method:'POST', body:payload })
+      toast('Category added')
     }
-    await qc.invalidateQueries({ queryKey:['categories'] })
+    await qc.invalidateQueries({ queryKey: queryKeys.categories() })
     setShowCatForm(false); resetCatForm()
   }
 
@@ -200,9 +208,9 @@ export function SettingsPage() {
     setCatBudgetGroup(cat.budgetGroup??''); setCatIcon(cat.icon); setCatColor(cat.color); setShowCatForm(true)
   }
   async function deleteCat(id: string) {
-    await fetch(`${API_URL}/api/categories?id=${id}`,{method:'DELETE'})
-    await qc.invalidateQueries({ queryKey:['categories'] })
-    setDeleteConfirm(null); toast('Đã xóa danh mục')
+    await apiDelete(`/api/categories?id=${id}`)
+    await qc.invalidateQueries({ queryKey: queryKeys.categories() })
+    setDeleteConfirm(null); toast('Category deleted')
   }
 
   const incomeCategories = categories.filter(c => c.type==='income' || c.type==='both')
@@ -217,7 +225,7 @@ export function SettingsPage() {
   function renderProfile() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={User} color="var(--accent-blue)" title="Thông tin cá nhân" subtitle="Tên hiển thị trong ứng dụng" />
+        <SectionHeader icon={User} color="var(--accent-blue)" title="Profile information" subtitle="Display name used in the app" />
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
           <div style={{ width:72, height:72, borderRadius:'50%', flexShrink:0,
             background:'linear-gradient(135deg, var(--accent-green), var(--accent-blue))',
@@ -226,17 +234,17 @@ export function SettingsPage() {
             {userName.charAt(0)?.toUpperCase() ?? '?'}
           </div>
           <div style={{ flex:1 }}>
-            <label className="label" htmlFor="settings-name">Tên hiển thị</label>
+            <label className="label" htmlFor="settings-name">Display name</label>
             <input id="settings-name" type="text" value={userName}
               onChange={e=>setUserName(e.target.value)}
-              placeholder="Nhập tên của bạn" className="input" />
+              placeholder="Enter your name" className="input" />
           </div>
         </div>
         <div>
           <button className="btn btn-primary btn-sm" onClick={saveProfile} disabled={saving}
             style={{ display:'flex', alignItems:'center', gap:6 }}>
             <Save size={14} />
-            {saving ? 'Đang lưu...' : 'Lưu thay đổi'}
+            {saving ? 'Saving...' : 'Save changes'}
           </button>
         </div>
       </div>
@@ -246,7 +254,7 @@ export function SettingsPage() {
   function renderAppearance() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={Palette} color="var(--accent-purple)" title="Giao diện" subtitle="Chế độ hiển thị" />
+        <SectionHeader icon={Palette} color="var(--accent-purple)" title="Appearance" subtitle="Display mode" />
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
           padding:'14px 16px', background:'var(--surface)', borderRadius:12,
           border:'1px solid var(--border)' }}>
@@ -255,9 +263,9 @@ export function SettingsPage() {
               ? <Moon size={18} style={{ color:'var(--accent-blue)' }} />
               : <Sun size={18} style={{ color:'var(--accent-gold)' }} />}
             <div>
-              <div style={{ fontSize:14, fontWeight:500 }}>{theme==='dark' ? 'Chế độ tối' : 'Chế độ sáng'}</div>
+              <div style={{ fontSize:14, fontWeight:500 }}>{theme==='dark' ? 'Dark mode' : 'Light mode'}</div>
               <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
-                {theme==='dark' ? 'Phù hợp với môi trường tối' : 'Phù hợp với ánh sáng ban ngày'}
+                {theme==='dark' ? 'Best for dark environments' : 'Best for daylight'}
               </div>
             </div>
           </div>
@@ -280,16 +288,16 @@ export function SettingsPage() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-          <SectionHeader icon={Brain} color="var(--accent-purple)" title="Bộ nhớ AI"
-            subtitle="Những gì agent ghi nhớ về bạn" />
+          <SectionHeader icon={Brain} color="var(--accent-purple)" title="AI Memory"
+            subtitle="What the assistant remembers about you" />
           <div style={{ display:'flex', gap:16, textAlign:'right', flexShrink:0 }}>
             <div>
               <div style={{ fontSize:20, fontWeight:700, color:'var(--accent-green)' }}>{facts.length}</div>
-              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Tổng facts</div>
+              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Total facts</div>
             </div>
             <div>
               <div style={{ fontSize:20, fontWeight:700, color:'var(--accent-blue)' }}>{verifiedCount}</div>
-              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Đã xác nhận</div>
+              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Confirmed</div>
             </div>
           </div>
         </div>
@@ -305,19 +313,19 @@ export function SettingsPage() {
               color: filterCat===cat ? CATEGORY_COLORS[cat]??'var(--accent-blue)' : 'var(--text-secondary)',
               fontWeight: filterCat===cat ? 600 : 400,
             }}>
-              {cat==='all' ? 'Tất cả' : CATEGORY_LABELS[cat]??cat}
+              {cat==='all' ? 'All' : CATEGORY_LABELS[cat]??cat}
             </button>
           ))}
         </div>
 
         {/* Facts list */}
         {factsLoading ? (
-          <div style={{ color:'var(--text-secondary)', textAlign:'center', padding:32 }}>Đang tải...</div>
+          <div style={{ color:'var(--text-secondary)', textAlign:'center', padding:32 }}>Loading...</div>
         ) : filteredFacts.length===0 ? (
           <div style={{ textAlign:'center', padding:40, color:'var(--text-secondary)',
             border:'1px dashed var(--border)', borderRadius:12 }}>
             <Brain size={28} style={{ opacity:0.25, marginBottom:8, display:'block', margin:'0 auto 8px' }} />
-            Chưa có facts nào. Hãy chat với AI để bắt đầu.
+            No facts yet. Chat with AI to get started.
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:420, overflowY:'auto', paddingRight:4 }}>
@@ -356,14 +364,14 @@ export function SettingsPage() {
                 {/* Right actions */}
                 <div style={{ display:'flex', gap:4, flexShrink:0 }}>
                   {!fact.verifiedByUser && (
-                    <button onClick={() => verifyFact.mutate(fact)} title="Xác nhận" style={{
+                    <button onClick={() => verifyFact.mutate(fact)} title="Confirm" style={{
                       padding:5, background:'transparent', border:'1px solid var(--border)',
                       borderRadius:6, cursor:'pointer', color:'var(--accent-green)',
                       display:'flex', alignItems:'center' }}>
                       <CheckCircle size={13} />
                     </button>
                   )}
-                  <button onClick={() => setDeleteFactTarget(fact)} title="Xóa" style={{
+                  <button onClick={() => setDeleteFactTarget(fact)} title="Delete" style={{
                     padding:5, background:'transparent', border:'1px solid var(--border)',
                     borderRadius:6, cursor:'pointer', color:'var(--text-secondary)',
                     display:'flex', alignItems:'center' }}>
@@ -383,14 +391,14 @@ export function SettingsPage() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
-          <SectionHeader icon={FileText} color="var(--accent-green)" title="Báo cáo tháng"
-            subtitle="AI tổng hợp tình hình tài chính và đề xuất hành động" />
+          <SectionHeader icon={FileText} color="var(--accent-green)" title="Monthly digest"
+            subtitle="AI summarizes your finances and suggests actions" />
           <button onClick={() => generateDigest.mutate()} disabled={isGenerating}
             className="btn btn-primary btn-sm"
             style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}>
             {isGenerating
-              ? <><RefreshCw size={13} style={{ animation:'spin 1s linear infinite' }} /> Đang tạo...</>
-              : <><Sparkles size={13} /> Tạo báo cáo mới</>}
+              ? <><RefreshCw size={13} style={{ animation:'spin 1s linear infinite' }} /> Generating...</>
+              : <><Sparkles size={13} /> Generate new digest</>}
           </button>
         </div>
 
@@ -398,7 +406,7 @@ export function SettingsPage() {
           <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:12,
             padding:24, textAlign:'center', color:'var(--text-secondary)', fontSize:13 }}>
             <RefreshCw size={20} style={{ animation:'spin 1s linear infinite', marginBottom:8, display:'block', margin:'0 auto 8px' }} />
-            AI đang phân tích dữ liệu tài chính... (5–15 giây)
+            AI is analyzing your financial data... (5-15 seconds)
           </div>
         )}
 
@@ -406,7 +414,7 @@ export function SettingsPage() {
           <div style={{ textAlign:'center', padding:48, color:'var(--text-secondary)',
             border:'1px dashed var(--border)', borderRadius:12, fontSize:13 }}>
             <FileText size={28} style={{ opacity:0.25, display:'block', margin:'0 auto 10px' }} />
-            Chưa có báo cáo nào. Nhấn &quot;Tạo báo cáo mới&quot; để bắt đầu.
+            No digests yet. Click &quot;Generate new digest&quot; to get started.
           </div>
         )}
 
@@ -415,14 +423,14 @@ export function SettingsPage() {
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20,
               paddingBottom:14, borderBottom:'1px solid var(--border)' }}>
               <div>
-                <div style={{ fontSize:14, fontWeight:700 }}>Báo cáo tháng {latestDigest.generatedForMonth}</div>
+                <div style={{ fontSize:14, fontWeight:700 }}>Monthly digest {latestDigest.generatedForMonth}</div>
                 <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:2 }}>
-                  Tạo lúc {new Date(latestDigest.createdAt).toLocaleString('vi-VN')}
+                  Generated at {new Date(latestDigest.createdAt).toLocaleString('en-US')}
                 </div>
               </div>
               <div style={{ padding:'4px 10px', borderRadius:6, background:'var(--accent-green)15',
                 color:'var(--accent-green)', fontSize:11, fontWeight:600 }}>
-                Mới nhất
+                Latest
               </div>
             </div>
             <DigestContent content={latestDigest.content} />
@@ -436,12 +444,12 @@ export function SettingsPage() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-          <SectionHeader icon={Tag} color="var(--accent-gold)" title="Quản lý danh mục"
-            subtitle="Tùy chỉnh danh mục thu chi" />
+          <SectionHeader icon={Tag} color="var(--accent-gold)" title="Manage categories"
+            subtitle="Customize income and expense categories" />
           <button onClick={() => { resetCatForm(); setShowCatForm(true) }}
             className="btn btn-primary btn-sm"
             style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-            <Plus size={13} /> Thêm danh mục
+            <Plus size={13} /> Add category
           </button>
         </div>
 
@@ -451,7 +459,7 @@ export function SettingsPage() {
               exit={{ opacity:0, height:0 }}
               style={{ background:'var(--bg-tertiary, var(--surface))', border:'1px solid var(--border)',
                 borderRadius:12, padding:16, overflow:'hidden' }}>
-              <div style={{ fontSize:14, fontWeight:600, marginBottom:12 }}>{editCat ? 'Sửa danh mục' : 'Danh mục mới'}</div>
+              <div style={{ fontSize:14, fontWeight:600, marginBottom:12 }}>{editCat ? 'Edit category' : 'New category'}</div>
               {/* Icons */}
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12,
                 maxHeight:140, overflowY:'auto', paddingRight:4 }}>
@@ -474,23 +482,23 @@ export function SettingsPage() {
               </div>
               <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:10, alignItems:'end', marginBottom:12 }}>
                 <div>
-                  <label className="label">Tên danh mục</label>
+                  <label className="label">Category name</label>
                   <input type="text" value={catName} onChange={e=>setCatName(e.target.value)}
-                    placeholder="VD: Cà phê" className="input" />
+                    placeholder="Example: Coffee" className="input" />
                 </div>
                 <div>
-                  <label className="label">Loại</label>
+                  <label className="label">Type</label>
                   <Select value={catType} onChange={v=>setCatType(v as 'income'|'expense'|'both')}
-                    options={[{value:'income',label:'Thu'},{value:'expense',label:'Chi'},{value:'both',label:'Cả hai'}]} />
+                    options={[{value:'income',label:'Income'},{value:'expense',label:'Expense'},{value:'both',label:'Both'}]} />
                 </div>
               </div>
               {(catType==='expense'||catType==='both') && (
                 <div style={{ marginBottom:12 }}>
-                  <label className="label" style={{ marginBottom:6, display:'block' }}>Nhóm 50/30/20</label>
+                  <label className="label" style={{ marginBottom:6, display:'block' }}>50/30/20 group</label>
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                    {[{value:'',label:'Chưa phân loại',color:'#6b7280'},
-                      {value:'needs',label:'🏠 Thiết yếu (50%)',color:'#3b82f6'},
-                      {value:'wants',label:'🎬 Mong muốn (30%)',color:'#10b981'}].map(opt => (
+                    {[{value:'',label:'Uncategorized',color:'#6b7280'},
+                      {value:'needs',label:'🏠 Needs (50%)',color:'#3b82f6'},
+                      {value:'wants',label:'🎬 Wants (30%)',color:'#10b981'}].map(opt => (
                       <button key={opt.value} type="button" onClick={()=>setCatBudgetGroup(opt.value)} style={{
                         padding:'5px 10px', borderRadius:8, fontSize:12, cursor:'pointer',
                         border:`2px solid ${catBudgetGroup===opt.value ? opt.color : 'var(--border)'}`,
@@ -502,18 +510,18 @@ export function SettingsPage() {
                 </div>
               )}
               <div style={{ display:'flex', gap:8, justifyContent:'flex-end' }}>
-                <button className="btn btn-secondary btn-sm" onClick={()=>{setShowCatForm(false);resetCatForm()}}>Hủy</button>
-                <button className="btn btn-primary btn-sm" onClick={saveCat} disabled={!catName.trim()}>Lưu</button>
+                <button className="btn btn-secondary btn-sm" onClick={()=>{setShowCatForm(false);resetCatForm()}}>Cancel</button>
+                <button className="btn btn-primary btn-sm" onClick={saveCat} disabled={!catName.trim()}>Save</button>
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+        <div className="settings-category-grid">
           <div>
             <div style={{ fontSize:11, color:'var(--text-secondary)', fontWeight:600,
               textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>
-              Thu nhập ({incomeCategories.length})
+              Income ({incomeCategories.length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {incomeCategories.map(cat => <CatRow key={cat.id} cat={cat} onEdit={openEditCat} onDelete={setDeleteConfirm} />)}
@@ -522,7 +530,7 @@ export function SettingsPage() {
           <div>
             <div style={{ fontSize:11, color:'var(--text-secondary)', fontWeight:600,
               textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>
-              Chi tiêu ({expenseCategories.length})
+              Expense ({expenseCategories.length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
               {expenseCategories.map(cat => <CatRow key={cat.id} cat={cat} onEdit={openEditCat} onDelete={setDeleteConfirm} />)}
@@ -536,13 +544,13 @@ export function SettingsPage() {
   function renderAbout() {
     return (
       <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={Info} color="var(--text-secondary)" title="Về ứng dụng" subtitle="Thông tin phiên bản" />
+        <SectionHeader icon={Info} color="var(--text-secondary)" title="About" subtitle="Version information" />
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {[
-            { label:'Phiên bản', value:'1.0.0', color:'var(--accent-green)' },
+            { label:'Version', value:'1.0.0', color:'var(--accent-green)' },
             { label:'AI Model', value:'Claude Sonnet 4.6', color:'var(--accent-purple)' },
             { label:'Tech Stack', value:'Next.js + FastAPI + PostgreSQL', color:'var(--text-primary)' },
-            { label:'Được tạo bởi', value:'WealthLog Team', color:'var(--text-primary)' },
+            { label:'Created by', value:'WealthLog Team', color:'var(--text-primary)' },
           ].map(item => (
             <div key={item.label} style={{ display:'flex', justifyContent:'space-between',
               alignItems:'center', padding:'12px 16px', background:'var(--surface)',
@@ -572,14 +580,14 @@ export function SettingsPage() {
       <div>
         {/* Page header */}
         <div style={{ marginBottom:28 }}>
-          <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>Cài đặt</h1>
-          <p style={{ fontSize:13, color:'var(--text-secondary)' }}>Tùy chỉnh ứng dụng theo sở thích của bạn</p>
+          <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>Settings</h1>
+          <p style={{ fontSize:13, color:'var(--text-secondary)' }}>Customize the app to your preferences</p>
         </div>
 
         {/* Two-column layout */}
-        <div style={{ display:'grid', gridTemplateColumns:'200px 1fr', gap:24, alignItems:'start' }}>
+        <div className="settings-shell-grid">
           {/* Left nav */}
-          <nav style={{ position:'sticky', top:24, display:'flex', flexDirection:'column', gap:2 }}>
+          <nav className="settings-nav">
             {SECTIONS.map(sec => {
               const Icon = sec.icon
               const active = activeSection === sec.id
@@ -619,14 +627,14 @@ export function SettingsPage() {
             <div className="overlay" onClick={() => setDeleteFactTarget(null)} />
             <div className="modal" style={{ padding:28, textAlign:'center' }}>
               <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
-              <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Xóa fact này?</h3>
+              <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Delete this fact?</h3>
               <p style={{ fontSize:13, color:'var(--text-secondary)', marginBottom:24 }}>{deleteFactTarget.fact}</p>
               <div style={{ display:'flex', gap:10 }}>
-                <button className="btn btn-secondary" style={{ flex:1 }} onClick={()=>setDeleteFactTarget(null)}>Hủy</button>
+                <button className="btn btn-secondary" style={{ flex:1 }} onClick={()=>setDeleteFactTarget(null)}>Cancel</button>
                 <button className="btn btn-danger" style={{ flex:1 }} onClick={async()=>{
                   await deleteFact.mutateAsync(deleteFactTarget.id)
-                  toast('Đã xóa fact'); setDeleteFactTarget(null)
-                }}>Xóa</button>
+                  toast('Fact deleted'); setDeleteFactTarget(null)
+                }}>Delete</button>
               </div>
             </div>
           </>
@@ -640,19 +648,65 @@ export function SettingsPage() {
             <div className="overlay" onClick={()=>setDeleteConfirm(null)} />
             <div className="modal" style={{ padding:28, textAlign:'center' }}>
               <div style={{ fontSize:36, marginBottom:10 }}>⚠️</div>
-              <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Xóa danh mục?</h3>
+              <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Delete category?</h3>
               <p style={{ fontSize:13, color:'var(--text-secondary)', marginBottom:24 }}>
-                Các giao dịch liên quan sẽ không bị xóa nhưng sẽ mất phân loại.
+                Related transactions will not be deleted, but they will lose this category.
               </p>
               <div style={{ display:'flex', gap:10 }}>
-                <button className="btn btn-secondary" style={{ flex:1 }} onClick={()=>setDeleteConfirm(null)}>Hủy</button>
-                <button className="btn btn-danger" style={{ flex:1 }} onClick={()=>deleteCat(deleteConfirm!)}>Xóa</button>
+                <button className="btn btn-secondary" style={{ flex:1 }} onClick={()=>setDeleteConfirm(null)}>Cancel</button>
+                <button className="btn btn-danger" style={{ flex:1 }} onClick={()=>deleteCat(deleteConfirm!)}>Delete</button>
               </div>
             </div>
           </>
         )}
       </Portal>
 
+      <style jsx>{`
+        .settings-shell-grid {
+          display: grid;
+          grid-template-columns: 200px minmax(0, 1fr);
+          gap: 24px;
+          align-items: start;
+        }
+
+        .settings-nav {
+          position: sticky;
+          top: 24px;
+          display: flex;
+          flex-direction: column;
+          gap: 2px;
+        }
+
+        .settings-category-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 16px;
+        }
+
+        @media (max-width: 900px) {
+          .settings-shell-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .settings-nav {
+            position: static;
+            flex-direction: row;
+            overflow-x: auto;
+            padding-bottom: 4px;
+            scrollbar-width: thin;
+          }
+
+          .settings-nav :global(button) {
+            flex: 0 0 auto;
+          }
+        }
+
+        @media (max-width: 720px) {
+          .settings-category-grid {
+            grid-template-columns: 1fr;
+          }
+        }
+      `}</style>
       <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
     </PageTransition>
   )
@@ -692,7 +746,7 @@ function CatRow({ cat, onEdit, onDelete }: {
           <span style={{ fontSize:9, padding:'1px 5px', borderRadius:4, lineHeight:'14px', fontWeight:600,
             background: cat.budgetGroup==='needs' ? '#3b82f615' : '#10b98115',
             color: cat.budgetGroup==='needs' ? '#3b82f6' : '#10b981' }}>
-            {cat.budgetGroup==='needs' ? 'Thiết yếu' : 'Mong muốn'}
+            {cat.budgetGroup==='needs' ? 'Needs' : 'Wants'}
           </span>
         )}
       </span>

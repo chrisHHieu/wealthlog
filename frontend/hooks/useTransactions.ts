@@ -1,8 +1,9 @@
 import { useState, useMemo } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'next/navigation'
 import { useToast } from '@/components/ui/toaster'
 import { Transaction, PaginatedResponse } from '@/types'
-import { API_URL } from '@/lib/api'
+import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 
 const PAGE_SIZE = 10
 
@@ -17,8 +18,6 @@ interface Category {
   name: string
   icon: string
 }
-
-import { useSearchParams } from 'next/navigation'
 
 export function useTransactions() {
   const qc = useQueryClient()
@@ -41,43 +40,46 @@ export function useTransactions() {
   function handleMonthChange(val: string) { setSelectedMonth(val); resetPage() }
 
   const params = useMemo(() => {
-    const p = new URLSearchParams()
-    p.set('page', String(page))
-    p.set('pageSize', String(PAGE_SIZE))
-    if (typeFilter) p.set('type', typeFilter)
-    if (accountFilter) p.set('accountId', accountFilter)
-    if (categoryFilter) p.set('categoryId', categoryFilter)
-    if (selectedMonth) {
-      p.set('startDate', `${selectedMonth}-01`)
-      p.set('endDate', `${selectedMonth}-31`)
+    return {
+      page,
+      pageSize: PAGE_SIZE,
+      type: typeFilter || undefined,
+      accountId: accountFilter || undefined,
+      categoryId: categoryFilter || undefined,
+      startDate: selectedMonth ? `${selectedMonth}-01` : undefined,
+      endDate: selectedMonth ? `${selectedMonth}-31` : undefined,
+      search: search || undefined,
     }
-    if (search) p.set('search', search)
-    return p
   }, [page, typeFilter, accountFilter, categoryFilter, selectedMonth, search])
 
   const { data: response, isLoading } = useQuery<PaginatedResponse<Transaction>>({
-    queryKey: ['transactions', typeFilter, accountFilter, categoryFilter, selectedMonth, search, page],
-    queryFn: () => fetch(`${API_URL}/api/transactions?${params}`).then(r => r.json()),
+    queryKey: queryKeys.transactions(
+      typeFilter,
+      accountFilter,
+      categoryFilter,
+      selectedMonth,
+      search,
+      page,
+    ),
+    queryFn: () => apiGet<PaginatedResponse<Transaction>>('/api/transactions', params),
   })
 
   const { data: accounts = [] } = useQuery<Account[]>({
-    queryKey: ['accounts'],
-    queryFn: () => fetch(`${API_URL}/api/accounts`).then(r => r.json()),
+    queryKey: queryKeys.accounts,
+    queryFn: () => apiGet<Account[]>('/api/accounts'),
   })
 
   const categoryParams = useMemo(() => {
-    const p = new URLSearchParams()
-    p.set('usedOnly', '1')
-    if (selectedMonth) {
-      p.set('startDate', `${selectedMonth}-01`)
-      p.set('endDate', `${selectedMonth}-31`)
+    return {
+      usedOnly: 1,
+      startDate: selectedMonth ? `${selectedMonth}-01` : undefined,
+      endDate: selectedMonth ? `${selectedMonth}-31` : undefined,
     }
-    return `?${p}`
   }, [selectedMonth])
 
   const { data: categories = [] } = useQuery<Category[]>({
-    queryKey: ['categories', selectedMonth],
-    queryFn: () => fetch(`${API_URL}/api/categories${categoryParams}`).then(r => r.json()),
+    queryKey: queryKeys.categories(selectedMonth),
+    queryFn: () => apiGet<Category[]>('/api/categories', categoryParams),
   })
 
   const transactions = response?.data ?? []
@@ -85,26 +87,25 @@ export function useTransactions() {
   const totalPages = response?.totalPages ?? 1
 
   async function deleteTransaction(id: string, txData?: Transaction) {
-    await fetch(`${API_URL}/api/transactions/${id}`, { method: 'DELETE' })
+    await apiDelete(`/api/transactions/${id}`)
     await Promise.all([
       qc.invalidateQueries({ queryKey: ['transactions'] }),
       qc.invalidateQueries({ queryKey: ['dashboard'] }),
-      qc.invalidateQueries({ queryKey: ['accounts'] }),
+      qc.invalidateQueries({ queryKey: queryKeys.accounts }),
     ])
 
-    toast('Đã xóa giao dịch', {
+    toast('Transaction deleted', {
       type: 'success',
       undo: async () => {
         if (!txData) return
-        await fetch(`${API_URL}/api/transactions`, {
+        await apiJson('/api/transactions', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(txData),
+          body: txData,
         })
         await Promise.all([
           qc.invalidateQueries({ queryKey: ['transactions'] }),
           qc.invalidateQueries({ queryKey: ['dashboard'] }),
-          qc.invalidateQueries({ queryKey: ['accounts'] }),
+          qc.invalidateQueries({ queryKey: queryKeys.accounts }),
         ])
       },
     })

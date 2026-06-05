@@ -6,7 +6,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/toaster'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { formatVNDCompact } from '@/lib/utils'
-import { API_URL } from '@/lib/api'
+import { apiDelete, queryKeys } from '@/lib/api'
 import { useGoals } from '@/hooks/useGoals'
 import { Goal } from '@/types'
 import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
@@ -43,9 +43,9 @@ export function GoalsPage() {
 
   async function handleDelete() {
     if (!deleteId) return
-    await fetch(`${API_URL}/api/goals/${deleteId}`, { method: 'DELETE' })
-    await qc.invalidateQueries({ queryKey: ['goals'] })
-    toast('Đã xóa mục tiêu')
+    await apiDelete(`/api/goals/${deleteId}`)
+    await qc.invalidateQueries({ queryKey: queryKeys.goals })
+    toast('Goal deleted')
   }
 
   return (
@@ -59,25 +59,25 @@ export function GoalsPage() {
         }}>
           <div>
             <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
-              Mục tiêu tài chính
+              Financial goals
             </h1>
             <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              {activeGoals.length} mục tiêu đang theo đuổi
-              {totalTarget > 0 && ` · Tổng ${formatVNDCompact(totalSaved)} / ${formatVNDCompact(totalTarget)}`}
+              {activeGoals.length} active goals
+              {totalTarget > 0 && ` · Total ${formatVNDCompact(totalSaved)} / ${formatVNDCompact(totalTarget)}`}
             </p>
           </div>
           <button id="add-goal-btn" onClick={openAdd} className="btn btn-primary">
-            <Plus size={15} /> Tạo mục tiêu
+            <Plus size={15} /> Create goal
           </button>
         </div>
 
         {activeGoals.length === 0 ? (
           <div className="empty-state card" style={{ padding: 'var(--space-16) var(--space-6)' }}>
             <span style={{ fontSize: 56 }}>🎯</span>
-            <p style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>Chưa có mục tiêu nào</p>
-            <p style={{ fontSize: 'var(--text-sm)' }}>Đặt ra mục tiêu tài chính để tiết kiệm có mục đích hơn</p>
+            <p style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>No goals yet</p>
+            <p style={{ fontSize: 'var(--text-sm)' }}>Create financial goals to save with purpose</p>
             <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 'var(--space-3)' }}>
-              <Plus size={15} /> Tạo mục tiêu đầu tiên
+              <Plus size={15} /> Create your first goal
             </button>
           </div>
         ) : (
@@ -110,7 +110,7 @@ export function GoalsPage() {
               letterSpacing: '0.06em',
               marginBottom: 'var(--space-3)',
             }}>
-              🏆 Đã hoàn thành ({completedGoals.length})
+              🏆 Completed ({completedGoals.length})
             </div>
             <div style={{
               display: 'grid',
@@ -139,8 +139,8 @@ export function GoalsPage() {
           isOpen={!!deleteId}
           onClose={() => setDeleteId(null)}
           onConfirm={handleDelete}
-          title="Xóa mục tiêu?"
-          description="Bạn có chắc muốn xóa mục tiêu này không?"
+          title="Delete goal?"
+          description="Are you sure you want to delete this goal?"
         />
       </div>
     </PageTransition>

@@ -52,6 +52,33 @@ async def test_create_transfer(client: AsyncClient, setup):
     assert dst["balance"] == 2000
 
 
+async def test_create_transfer_requires_destination(client: AsyncClient, setup):
+    r = await client.post("/api/transactions", json={
+        "type": "transfer", "amount": 2000, "accountId": setup["account_id"],
+        "date": "2026-04-15", "description": "save"
+    })
+    assert r.status_code == 422
+
+    acc = (await client.get(f"/api/accounts/{setup['account_id']}")).json()
+    assert acc["balance"] == 10000
+
+
+async def test_create_income_rejects_destination(client: AsyncClient, setup):
+    acc2 = (await client.post("/api/accounts", json={
+        "name": "Savings", "type": "savings", "balance": 0
+    })).json()
+    r = await client.post("/api/transactions", json={
+        "type": "income", "amount": 500, "accountId": setup["account_id"],
+        "toAccountId": acc2["id"], "date": "2026-04-15", "description": "salary"
+    })
+    assert r.status_code == 422
+
+    src = (await client.get(f"/api/accounts/{setup['account_id']}")).json()
+    dst = (await client.get(f"/api/accounts/{acc2['id']}")).json()
+    assert src["balance"] == 10000
+    assert dst["balance"] == 0
+
+
 async def test_list_transactions(client: AsyncClient, setup):
     await client.post("/api/transactions", json={
         "type": "expense", "amount": 100, "accountId": setup["account_id"],

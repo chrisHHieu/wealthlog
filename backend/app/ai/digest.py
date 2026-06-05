@@ -5,8 +5,8 @@ from datetime import datetime, timedelta, timezone
 import anthropic
 
 from app.ai.agent.tools import execute_tool
-from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
 from app.ai.memory.synthesis import get_user_model_text
+from app.ai.model_registry import get_preferred_model, resolve_client_kwargs
 from app.database import get_session
 from app.logging_config import get_logger
 from app.models.weekly_digest import WeeklyDigest
