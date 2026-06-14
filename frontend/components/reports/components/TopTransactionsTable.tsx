@@ -8,7 +8,7 @@ interface TopTransactionsTableProps {
 export function TopTransactionsTable({ transactions }: TopTransactionsTableProps) {
   return (
     <section className="card top-transactions-card">
-      <div style={{ fontSize: 15, fontWeight: 750, marginBottom: 4 }}>Largest transactions</div>
+      <div className="card-title" style={{ marginBottom: 4 }}>Largest transactions</div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 16 }}>Highest-value rows in the selected period</div>
 
       {transactions.length === 0 ? (

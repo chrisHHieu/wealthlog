@@ -62,9 +62,9 @@ async def generate_digest() -> str:
     data_sections: list[str] = []
     for tool_name, args in tool_calls:
         try:
-            result = await execute_tool(tool_name, args)
-            if result and result.strip():
-                data_sections.append(f"[{tool_name}]\n{result}")
+            text, is_error = await execute_tool(tool_name, args)
+            if not is_error and text.strip():
+                data_sections.append(f"[{tool_name}]\n{text}")
         except Exception:
             logger.warning("Digest: tool %s failed, skipping", tool_name)
 

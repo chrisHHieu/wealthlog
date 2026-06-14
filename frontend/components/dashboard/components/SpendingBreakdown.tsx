@@ -1,9 +1,26 @@
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts'
 import { motion } from 'framer-motion'
+import { ChartPie, Plus } from 'lucide-react'
 import { formatVND, formatVNDCompact } from '@/lib/utils'
+import { useAppStore } from '@/store/useAppStore'
 import { DashboardData } from '@/types'
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter'
 import { ChartTooltipProps } from '@/types/chart'
+
+function EmptyBreakdown() {
+  const openAddTransaction = useAppStore(s => s.openAddTransaction)
+  return (
+    <div className="empty-state" style={{ flex: 1 }}>
+      <div className="icon-tile" style={{ width: 48, height: 48 }}>
+        <ChartPie size={22} />
+      </div>
+      <span style={{ fontSize: 'var(--text-sm)' }}>No spending data yet</span>
+      <button className="btn btn-secondary btn-sm" onClick={() => openAddTransaction('expense')}>
+        <Plus size={13} /> Add expense
+      </button>
+    </div>
+  )
+}
 
 interface SpendingBreakdownProps {
   data?: DashboardData
@@ -30,9 +47,9 @@ function DonutTooltip({ active, payload }: ChartTooltipProps<SpendingSlice>) {
 }
 
 const GROUP_CONFIG = {
-  needs:   { label: 'Needs', target: 50, color: '#3B82F6' },
-  wants:   { label: 'Wants', target: 30, color: '#00B386' },
-  savings: { label: 'Savings', target: 20, color: '#E8A838' },
+  needs:   { label: 'Needs', target: 50, color: 'var(--accent-blue)' },
+  wants:   { label: 'Wants', target: 30, color: 'var(--accent-green)' },
+  savings: { label: 'Savings', target: 20, color: 'var(--accent-gold)' },
 } as const
 
 export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
@@ -60,7 +77,7 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
+        <div className="card-title-lg">
           Expense breakdown
         </div>
         <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 2 }}>
@@ -71,10 +88,7 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
       {isLoading ? (
         <div className="skeleton" style={{ flex: 1, borderRadius: 'var(--radius-md)' }} />
       ) : pieData.length === 0 ? (
-        <div className="empty-state" style={{ flex: 1 }}>
-          <span style={{ fontSize: 32 }}>🍕</span>
-          <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>No spending data yet</span>
-        </div>
+        <EmptyBreakdown />
       ) : (
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
           {/* Donut chart */}
@@ -113,7 +127,7 @@ export function SpendingBreakdown({ data, isLoading }: SpendingBreakdownProps) {
               justifyContent: 'center',
               pointerEvents: 'none',
             }}>
-              <div style={{
+              <div className="num-meta" style={{
                 fontSize: 'var(--text-xl)',
                 fontWeight: 700,
                 color: 'var(--text-primary)',

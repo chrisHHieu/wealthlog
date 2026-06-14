@@ -7,6 +7,46 @@ from app.config import settings
 
 _DEFAULT_SCORE = 5
 
+# ── Lazy staleness decay ──────────────────────────────────────────────────────
+# Importance is never mutated by time. Ranking applies this read-time penalty
+# instead: one point per step of content staleness, floored so old facts stay
+# discoverable. A content refresh (updated_at) restores full weight instantly.
+
+STALENESS_STEP_DAYS = 30
+EFFECTIVE_IMPORTANCE_FLOOR = 1
+
+
+def ensure_aware(dt: datetime | None) -> datetime | None:
+    """Coerce a naive datetime (SQLite) to UTC-aware; pass through otherwise."""
+    if dt is not None and dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt
+
+
+def effective_importance(
+    importance: int,
+    verified_by_user: bool,
+    updated_at: datetime | None,
+    now: datetime | None = None,
+) -> int:
+    """Stored importance minus an age penalty — computed at read time.
+
+    Verified facts are exempt: the user vouched for them, so time alone does
+    not erode trust. ``updated_at`` is the content clock — access bumps must
+    not touch it (see fact_store._bump_access), or staleness never accrues.
+    """
+    updated_at = ensure_aware(updated_at)
+    if verified_by_user or updated_at is None:
+        return importance
+    now = now or datetime.now(UTC)
+    age_days = (now - updated_at).days
+    if age_days <= 0:
+        return importance
+    return max(
+        EFFECTIVE_IMPORTANCE_FLOOR,
+        importance - age_days // STALENESS_STEP_DAYS,
+    )
+
 
 def _clamp_score(raw: object) -> int:
     """Coerce a reviewer-emitted 1-10 score into the valid band.

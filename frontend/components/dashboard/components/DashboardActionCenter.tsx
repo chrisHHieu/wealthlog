@@ -25,7 +25,7 @@ export function DashboardActionCenter({ insights, isLoading }: DashboardActionCe
 
   return (
     <section className="card" style={{ padding: 20, height: '100%' }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Priority actions</div>
+      <div className="card-title" style={{ marginBottom: 14 }}>Priority actions</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {insights.actions.slice(0, 3).map(action => {
           const cfg = toneConfig[action.tone]

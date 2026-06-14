@@ -4,7 +4,7 @@ import uuid
 from datetime import UTC, datetime
 
 from mcp.server.fastmcp import FastMCP
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 
 from app.ai.memory.commitments import update_commitment_status
 from app.ai.memory.facts import (
@@ -75,38 +75,49 @@ def register(mcp: FastMCP) -> None:
     # ── Fact tools ────────────────────────────────────────────────────────────
 
     @mcp.tool()
-    async def list_my_facts(limit: int = 50) -> str:
-        """Show every long-term fact currently remembered about the user.
+    async def list_my_facts(limit: int = 50, offset: int = 0) -> str:
+        """Show long-term facts remembered about the user, most important first.
         - limit: max rows to return (default 50, max 200).
+        - offset: rows to skip — page forward when a previous result was truncated.
 
         NOTE: Facts are already injected into your system prompt context — do NOT
         call this to look up what you know. Call ONLY when the user explicitly asks
         to see/manage their stored facts, or when you need a short ID to call
         forget_fact or edit_fact."""
         capped = max(1, min(limit, 200))
+        skip = max(0, offset)
+        active = or_(
+            UserFact.expires_at.is_(None),
+            UserFact.expires_at > datetime.now(UTC),
+        )
         async with get_session() as db:
+            total = (
+                await db.execute(
+                    select(func.count()).select_from(UserFact).where(active)
+                )
+            ).scalar_one()
             rows = (
                 await db.execute(
                     select(UserFact)
-                    .where(
-                        or_(
-                            UserFact.expires_at.is_(None),
-                            UserFact.expires_at > datetime.now(UTC),
-                        )
-                    )
+                    .where(active)
                     .order_by(
                         UserFact.importance.desc(),
                         UserFact.verified_by_user.desc(),
                         UserFact.updated_at.desc(),
+                        UserFact.id,  # stable tie-break so pages never overlap
                     )
+                    .offset(skip)
                     .limit(capped)
                 )
             ).scalars().all()
 
         if not rows:
+            if total:
+                return f"No facts at offset {skip} — only {total} stored."
             return "No facts stored yet."
 
-        lines = [f"{len(rows)} fact(s):"]
+        end = skip + len(rows)
+        lines = [f"Facts {skip + 1}–{end} of {total}:"]
         for r in rows:
             label = _CATEGORY_LABELS.get(r.category, r.category)
             mark = "[✓]" if r.verified_by_user else "   "
@@ -115,6 +126,8 @@ def register(mcp: FastMCP) -> None:
                 f"- {_short_id(r.id)} {mark} ({label}, importance={r.importance}) "
                 f"{r.fact}{topics_str}"
             )
+        if end < total:
+            lines.append(f"[{total - end} more — re-call with offset={end}]")
         return "\n".join(lines)
 
     @mcp.tool()

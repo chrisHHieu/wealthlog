@@ -3,12 +3,17 @@
 import uuid
 from datetime import UTC, datetime
 
-from sqlalchemy import func, nulls_last, or_, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.memory.fact_scoring import effective_importance, ensure_aware
 from app.config import settings
 from app.database import get_session
 from app.models.user_fact import UserFact
+
+# Safety bound on the ranking pool — consolidation keeps the live set far
+# below this, so in practice every non-expired fact is a candidate.
+_FETCH_CAP = 500
 
 
 async def _bump_access(db: AsyncSession, ids: list) -> None:
@@ -25,6 +30,10 @@ async def _bump_access(db: AsyncSession, ids: list) -> None:
         .values(
             access_count=UserFact.access_count + 1,
             last_accessed_at=datetime.now(UTC),
+            # Being injected is not a content change — pin updated_at so the
+            # column's onupdate default doesn't reset the staleness clock
+            # (effective_importance ages facts by updated_at).
+            updated_at=UserFact.updated_at,
         )
     )
 
@@ -36,8 +45,11 @@ async def get_user_facts(
 ) -> list[dict]:
     """Load non-expired user facts for system prompt injection.
 
-    Ranking order, in descending priority:
-    1. importance — reviewer-assigned, drives the broad ordering.
+    Candidates are fetched broadly and ranked in Python so staleness can be
+    priced in (SQL can't see the read-time age penalty). Ranking order, in
+    descending priority:
+    1. effective importance — stored importance minus age penalty
+       (fact_scoring.effective_importance); old facts sink, fresh ones rise.
     2. verified_by_user — user-confirmed beats guessed at equal importance.
     3. confidence — reviewer's certainty hint as the next tie-breaker.
     4. last_accessed_at — frequently-surfaced facts bubble up among equals.
@@ -47,6 +59,7 @@ async def get_user_facts(
     the rows returned — disable it for read-only introspection.
     """
     now = datetime.now(UTC)
+    epoch = datetime.min.replace(tzinfo=UTC)
     async with session_factory() as db:
         rows = (
             await db.execute(
@@ -57,29 +70,42 @@ async def get_user_facts(
                         UserFact.expires_at > now,
                     ),
                 )
-                .order_by(
-                    UserFact.importance.desc(),
-                    UserFact.verified_by_user.desc(),
-                    UserFact.confidence.desc(),
-                    nulls_last(UserFact.last_accessed_at.desc()),
-                    UserFact.updated_at.desc(),
-                )
-                .limit(limit)
+                .order_by(UserFact.importance.desc())
+                .limit(_FETCH_CAP)
             )
         ).scalars().all()
 
+        eff = {
+            r.id: effective_importance(
+                r.importance, r.verified_by_user, r.updated_at, now,
+            )
+            for r in rows
+        }
+
+        def _rank(r: UserFact) -> tuple:
+            return (
+                eff[r.id],
+                r.verified_by_user,
+                r.confidence,
+                ensure_aware(r.last_accessed_at) or epoch,
+                ensure_aware(r.updated_at) or epoch,
+            )
+
+        selected = sorted(rows, key=_rank, reverse=True)[:limit]
+
         if track_access:
-            await _bump_access(db, [r.id for r in rows])
+            await _bump_access(db, [r.id for r in selected])
 
         return [
             {
                 "fact": r.fact,
                 "category": r.category,
                 "importance": r.importance,
+                "effective_importance": eff[r.id],
                 "verified_by_user": r.verified_by_user,
                 "topics": r.topics or [],
             }
-            for r in rows
+            for r in selected
         ]
 
 

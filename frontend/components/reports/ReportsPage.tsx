@@ -44,7 +44,7 @@ export function ReportsPage() {
       />
 
       {mode === 'month' ? (
-        <MonthlyReportView data={data} analysis={analysis} isLoading={isLoading} />
+        <MonthlyReportView data={data} analysis={analysis} isLoading={isLoading} selectedMonth={selectedMonth} />
       ) : (
         <YearlyReportView data={data} analysis={analysis} isLoading={isLoading} />
       )}

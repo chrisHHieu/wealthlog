@@ -2,6 +2,8 @@
  * Centralized chart theming for Recharts
  * Premium styling with gradients, custom colors, and consistent formatting
  */
+import { formatVNDCompact } from '@/lib/utils'
+import { ChartTooltipProps } from '@/types/chart'
 
 export const CHART_COLORS = {
   green: '#00B386',
@@ -72,6 +74,33 @@ export const TOOLTIP_STYLE = {
     color: 'var(--text-primary)',
     marginBottom: 4,
   },
+}
+
+/**
+ * Shared premium tooltip — glass surface (.chart-tooltip), colored dot per series,
+ * right-aligned compact VND value. Use across every chart for one consistent look:
+ *   <Tooltip content={<ChartTooltip />} cursor={{ fill: 'var(--surface)', radius: 8 }} />
+ */
+export function ChartTooltip({ active, payload, label }: ChartTooltipProps) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="chart-tooltip">
+      {label != null && label !== '' && (
+        <div style={{ color: 'var(--text-secondary)', fontWeight: 600, marginBottom: 'var(--space-2)', fontSize: 'var(--text-sm)' }}>
+          {label}
+        </div>
+      )}
+      {payload.map((p, i) => (
+        <div key={p.dataKey ?? i} style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)', marginBottom: 3 }}>
+          <span style={{ width: 8, height: 8, borderRadius: 2, background: p.color, flexShrink: 0 }} />
+          <span style={{ color: 'var(--text-secondary)', fontSize: 'var(--text-sm)' }}>{p.name}</span>
+          <strong className="num-meta" style={{ color: 'var(--text-primary)', fontSize: 'var(--text-sm)', marginLeft: 'auto', paddingLeft: 'var(--space-3)' }}>
+            {formatVNDCompact(Number(p.value ?? 0))}
+          </strong>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 // Gradient definitions for use in charts

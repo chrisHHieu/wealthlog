@@ -38,16 +38,34 @@ export function useChat(model: string | null) {
     await consumeChatStream(res, aiIdRef, applyEvent, onFirstEvent)
   }, [applyEvent])
 
-  const sendMessage = useCallback(async (content: string) => {
+  /** Mark a streaming assistant message as settled (after abort or error). */
+  const finalizeMessage = useCallback((aiId: string, error?: boolean) => {
+    setMessages(prev => prev.map(m =>
+      m.id === aiId
+        ? {
+            ...m,
+            isStreaming: false,
+            error,
+            content: error ? (m.content || 'Sorry, something went wrong. Please try again.') : m.content,
+            steps: (m.steps || []).map(step =>
+              'streaming' in step && step.streaming ? { ...step, streaming: false } : step
+            ),
+          }
+        : m
+    ))
+  }, [])
+
+  const sendMessage = useCallback(async (content: string, baseMessages?: ChatMessageType[]) => {
+    const base = baseMessages ?? messagesRef.current
     const userMsg: ChatMessageType = { id: crypto.randomUUID(), role: 'user', content, timestamp: new Date() }
     const aiId = crypto.randomUUID()
 
-    setMessages(prev => [...prev, userMsg, {
+    setMessages([...base, userMsg, {
       id: aiId, role: 'assistant', content: '', timestamp: new Date(), steps: [], isStreaming: true,
     }])
     setIsStreaming(true)
 
-    const history = [...messages, userMsg].map(m => ({ role: m.role, content: m.content }))
+    const history = [...base, userMsg].map(m => ({ role: m.role, content: m.content }))
     const abort = new AbortController()
     abortRef.current = abort
 
@@ -61,16 +79,28 @@ export function useChat(model: string | null) {
       if (!res.ok || !res.body) throw new Error(`API error: ${res.status}`)
       await consumeStream(res, { current: aiId })
     } catch (err) {
-      if ((err as Error).name !== 'AbortError') {
-        setMessages(prev => prev.map(m =>
-          m.id === aiId ? { ...m, content: m.content || 'Sorry, something went wrong. Please try again.', isStreaming: false } : m
-        ))
-      }
+      finalizeMessage(aiId, (err as Error).name !== 'AbortError')
     } finally {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [messages, sessionId, model, consumeStream])
+  }, [sessionId, model, consumeStream, finalizeMessage])
+
+  /** Abort the in-flight run; the catch path in sendMessage settles the message. */
+  const stopStreaming = useCallback(() => {
+    abortRef.current?.abort()
+  }, [])
+
+  /** Re-send the most recent user message, dropping it and the failed reply. */
+  const retryLast = useCallback(() => {
+    const current = messagesRef.current
+    let lastUserIdx = -1
+    for (let i = current.length - 1; i >= 0; i--) {
+      if (current[i].role === 'user') { lastUserIdx = i; break }
+    }
+    if (lastUserIdx === -1) return
+    void sendMessage(current[lastUserIdx].content, current.slice(0, lastUserIdx))
+  }, [sendMessage])
 
   // Reconnect to an in-progress agent run for the given session, if any.
   // Server replies `event: no_active` and closes when nothing is live — we
@@ -111,10 +141,12 @@ export function useChat(model: string | null) {
     } catch {
       /* ignore */
     } finally {
+      // Settle the attached message in case the stream was aborted mid-run
+      if (aiIdRef.current) finalizeMessage(aiIdRef.current)
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [consumeStream])
+  }, [consumeStream, finalizeMessage])
 
   const loadSession = useCallback(async (id: string) => {
     setSessionId(id)
@@ -134,7 +166,7 @@ export function useChat(model: string | null) {
     setIsStreaming(false)
   }, [])
 
-  return { messages, isStreaming, sessionId, sendMessage, newSession, loadSession }
+  return { messages, isStreaming, sessionId, sendMessage, stopStreaming, retryLast, newSession, loadSession }
 }
 
 export function useSessions(currentSessionId: string | null) {

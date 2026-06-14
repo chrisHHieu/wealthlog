@@ -34,7 +34,7 @@ function ComparisonTable({ data, type }: { data: CategoryComparison[]; type: 'ex
 
   return (
     <div className="card comparison-card">
-      <div style={{ fontWeight: 750, fontSize: 15, marginBottom: 4 }}>
+      <div className="card-title" style={{ marginBottom: 4 }}>
         {type === 'expense' ? 'Expense comparison' : 'Income comparison'}
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 16 }}>

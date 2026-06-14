@@ -7,7 +7,8 @@ from uuid import uuid4
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.ai.memory.decay import decay_old_facts, purge_expired_facts
+from app.ai.memory.decay import purge_expired_facts, sunset_stale_facts
+from app.ai.memory.dreaming import run_dreaming_pass
 from app.config import settings
 from app.database import async_session
 from app.logging_config import get_logger, reset_request_id, set_request_id, setup_logging
@@ -53,14 +54,24 @@ def _run_migrations() -> None:
         logger.info("Alembic: %s", line)
 
 
-async def _fact_decay_loop() -> None:
-    """Run importance decay and expired-fact purge once per day."""
+async def _memory_maintenance_loop() -> None:
+    """Daily memory upkeep: sunset stale facts, dream over expired ones, purge.
+
+    Staleness itself is priced into ranking at read time (lazy decay in
+    fact_scoring.effective_importance) — this loop only runs the destructive
+    tail. Order matters — the dreaming pass rewrites expired facts into
+    past-tense outcome facts, so it must run before the purge deletes them.
+    """
     while True:
         await asyncio.sleep(24 * 60 * 60)
         try:
-            await decay_old_facts()
+            await sunset_stale_facts()
         except Exception:
-            logger.exception("Scheduled fact decay failed")
+            logger.exception("Scheduled fact sunset failed")
+        try:
+            await run_dreaming_pass()
+        except Exception:
+            logger.exception("Scheduled dreaming pass failed")
         try:
             await purge_expired_facts()
         except Exception:
@@ -82,7 +93,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         await seed(session)
         await session.commit()
 
-    asyncio.create_task(_fact_decay_loop())
+    asyncio.create_task(_memory_maintenance_loop())
 
     yield
     logger.info("Shutting down %s", settings.app_name)

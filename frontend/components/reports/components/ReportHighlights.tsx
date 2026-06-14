@@ -104,7 +104,7 @@ export function YearlyHealthStrip({ analysis }: { analysis: ReportAnalysis }) {
     <section className="card" style={{ padding: 20 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16 }}>
         <CalendarDays size={17} color="var(--accent-green)" />
-        <div style={{ fontSize: 15, fontWeight: 700 }}>Yearly financial health</div>
+        <div className="card-title">Yearly financial health</div>
       </div>
       <div className="yearly-health-grid">
         {items.map(item => (

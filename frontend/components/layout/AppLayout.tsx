@@ -7,14 +7,22 @@ import { useAppStore } from '@/store/useAppStore'
 import { cn } from '@/lib/utils'
 import { TransactionDrawer } from '@/components/transactions/TransactionDrawer'
 import { ChatPanel } from '@/components/chat/ChatPanel'
+import { CommandPalette } from '@/components/ui/CommandPalette'
 import { Suspense, useEffect } from 'react'
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { sidebarCollapsed, chatOpen, openAddTransaction, toggleChat } = useAppStore()
+  const { sidebarCollapsed, chatOpen, openAddTransaction, toggleChat, toggleCommandPalette } = useAppStore()
 
   // Keyboard shortcuts
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      // Ctrl/Cmd+K works everywhere, including inside inputs
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        toggleCommandPalette()
+        return
+      }
+
       const target = e.target as HTMLElement
       if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
 
@@ -29,7 +37,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [openAddTransaction, toggleChat])
+  }, [openAddTransaction, toggleChat, toggleCommandPalette])
 
   return (
     <div className="app-layout">
@@ -42,6 +50,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       </main>
       <MobileNav />
       <ChatPanel />
+      <CommandPalette />
       <Suspense><TransactionDrawer /></Suspense>
     </div>
   )

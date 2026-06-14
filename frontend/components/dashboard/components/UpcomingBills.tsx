@@ -1,4 +1,4 @@
-import { CalendarClock } from 'lucide-react'
+import { CalendarCheck, CalendarClock } from 'lucide-react'
 import { formatVNDCompact } from '@/lib/utils'
 import { DashboardData } from '@/types'
 
@@ -24,7 +24,7 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-5)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Upcoming bills</div>
+        <div className="card-title">Upcoming bills</div>
         <CalendarClock size={16} style={{ color: 'var(--text-tertiary)' }} />
       </div>
 
@@ -34,7 +34,9 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
         </div>
       ) : bills.length === 0 ? (
         <div className="empty-state" style={{ flex: 1, padding: 'var(--space-6) var(--space-3)' }}>
-          <span style={{ fontSize: 32 }}>🎉</span>
+          <div className="icon-tile" style={{ width: 48, height: 48 }}>
+            <CalendarCheck size={22} />
+          </div>
           <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>No upcoming bills</span>
         </div>
       ) : (
@@ -44,7 +46,7 @@ export function UpcomingBills({ data, isLoading }: UpcomingBillsProps) {
             const isUrgent = daysLeft <= 3
 
             return (
-              <div key={bill.id} className={isUrgent ? 'pulse-alert' : ''} style={{
+              <div key={bill.id} style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: 'var(--space-3)',

@@ -1,11 +1,23 @@
 import type { Metadata } from 'next'
-import { Plus_Jakarta_Sans } from 'next/font/google'
+import { Geist, Geist_Mono, Fraunces } from 'next/font/google'
 import './globals.css'
 import { Providers } from './providers'
 
-const jakarta = Plus_Jakarta_Sans({
-  variable: '--font-inter',
+const geist = Geist({
+  variable: '--font-geist',
   subsets: ['latin'],
+})
+
+const geistMono = Geist_Mono({
+  variable: '--font-geist-mono',
+  subsets: ['latin'],
+})
+
+// Editorial display serif — variable weight + optical sizing for bold, magazine-style headers
+const fraunces = Fraunces({
+  variable: '--font-fraunces',
+  subsets: ['latin'],
+  style: ['normal', 'italic'],
 })
 
 export const metadata: Metadata = {
@@ -21,7 +33,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning data-scroll-behavior="smooth">
-      <body className={`${jakarta.variable} font-sans antialiased`}>
+      <body className={`${geist.variable} ${geistMono.variable} ${fraunces.variable} font-sans antialiased`}>
         <Providers>{children}</Providers>
       </body>
     </html>

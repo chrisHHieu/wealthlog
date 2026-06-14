@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Calendar, ChevronLeft, ChevronRight } from 'lucide-react'
 
@@ -96,7 +96,7 @@ export function MonthPicker({ value, onChange }: MonthPickerProps) {
             style={{
               position: 'absolute', top: 'calc(100% + 6px)', left: 0,
               background: 'var(--bg-secondary)', border: '1px solid var(--surface-border)',
-              borderRadius: 12, boxShadow: 'var(--shadow-dropdown)', zIndex: 50,
+              borderRadius: 12, boxShadow: 'var(--elevation-3)', zIndex: 50,
               width: 220, padding: '12px', transformOrigin: 'top',
             }}
           >

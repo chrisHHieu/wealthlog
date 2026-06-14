@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Portal } from '@/components/ui/Portal'
 import { useQueryClient } from '@tanstack/react-query'
@@ -105,7 +106,9 @@ export function GoalFormDrawer({ isOpen, onClose, initialData }: GoalFormDrawerP
             <motion.div className="drawer" style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h2 style={{ fontSize: 17, fontWeight: 600 }}>{initialData ? 'Edit goal' : 'Create new goal'}</h2>
-                <button onClick={onClose} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }}>✕</button>
+                <button onClick={onClose} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }} aria-label="Close">
+                  <X size={16} />
+                </button>
               </div>
 
               <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 16 }}>

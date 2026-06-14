@@ -11,7 +11,9 @@ def test_empty_message_returns_empty():
 def test_lowercases_and_dedupes_tokens():
     """Tokens normalize to lowercase; duplicates collapse, order preserved."""
     out = _extract_query_topics("Budget Budget BUDGET tracking")
-    assert out == ["budget", "tracking"]
+    assert out.count("budget") == 1
+    assert "tracking" in out
+    assert out.index("budget") < out.index("tracking")
 
 
 def test_drops_single_char_tokens():
@@ -50,3 +52,24 @@ def test_normalizes_unicode_form():
     composed = _extract_query_topics("nợ")  # NFC
     decomposed = _extract_query_topics("nợ")  # NFD source — both should match
     assert composed == decomposed
+
+
+def test_emits_adjacent_bigrams():
+    """Two-word stored topics ('tiết kiệm') only match ?| as whole elements."""
+    out = _extract_query_topics("kế hoạch tiết kiệm của tôi")
+    assert "tiết kiệm" in out
+    assert "kế hoạch" in out
+
+
+def test_expands_english_alias_to_canonical():
+    """English query must reach canonical Vietnamese topics written by the fact path."""
+    out = _extract_query_topics("how is my salary doing")
+    assert "thu nhập" in out  # whole phrase — for the ?| element match
+    assert "thu" in out  # words — for the word-level overlap scorer
+    assert "nhập" in out
+
+
+def test_expands_vietnamese_colloquial_alias():
+    """'lương' is stored canonically as 'thu nhập'; the query side must follow."""
+    out = _extract_query_topics("lương tháng này")
+    assert "thu nhập" in out

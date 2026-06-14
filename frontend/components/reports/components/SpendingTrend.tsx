@@ -2,26 +2,7 @@ import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContai
 import { formatVNDCompact } from '@/lib/utils'
 import { TrendPoint } from '@/types'
 import { ReportMode } from '@/hooks/useReports'
-import { ChartTooltipProps } from '@/types/chart'
-
-function TrendTooltip({ active, payload, label }: ChartTooltipProps) {
-  if (!active || !payload?.length) return null
-  return (
-    <div style={{
-      background: 'var(--bg-tertiary)', border: '1px solid var(--surface-border)',
-      borderRadius: 10, padding: '12px 16px', fontSize: 12,
-    }}>
-      <div style={{ color: 'var(--text-secondary)', marginBottom: 8, fontWeight: 600 }}>{label}</div>
-      {payload.map((p) => (
-        <div key={p.dataKey} style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
-          <span style={{ color: 'var(--text-secondary)' }}>{p.name}:</span>
-          <strong style={{ color: 'var(--text-primary)' }}>{formatVNDCompact(Number(p.value ?? 0))}</strong>
-        </div>
-      ))}
-    </div>
-  )
-}
+import { AXIS_STYLE, GRID_STYLE, CHART_COLORS, ChartTooltip } from '@/lib/chartTheme'
 
 interface SpendingTrendProps {
   data: TrendPoint[]
@@ -51,54 +32,59 @@ export function SpendingTrend({ data, mode, isLoading }: SpendingTrendProps) {
 
   return (
     <div className="card" style={{ padding: 20 }}>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>
+      <div className="card-title" style={{ marginBottom: 4 }}>
         Spending trend
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
-        Cumulative expense & moving average ({windowSize} {mode === 'month' ? 'days' : 'months'})
+        Cumulative expense &amp; moving average ({windowSize} {mode === 'month' ? 'days' : 'months'})
       </div>
 
       <ResponsiveContainer width="100%" height={280}>
-        <AreaChart data={withMA}>
+        <AreaChart data={withMA} margin={{ top: 8, right: 8, bottom: 0, left: 0 }}>
           <defs>
             <linearGradient id="gradCum" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="var(--accent-red)" stopOpacity={0.15} />
-              <stop offset="95%" stopColor="var(--accent-red)" stopOpacity={0} />
+              <stop offset="5%" stopColor={CHART_COLORS.red} stopOpacity={0.22} />
+              <stop offset="95%" stopColor={CHART_COLORS.red} stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" vertical={false} />
+          <CartesianGrid {...GRID_STYLE} vertical={false} />
           <XAxis
             dataKey="label"
-            tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+            tick={AXIS_STYLE}
             axisLine={false}
             tickLine={false}
+            dy={6}
             interval={mode === 'month' ? 4 : 0}
           />
           <YAxis
-            tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }}
+            tick={AXIS_STYLE}
             axisLine={false}
             tickLine={false}
             tickFormatter={v => formatVNDCompact(v)}
             width={65}
           />
-          <Tooltip cursor={{ fill: 'transparent' }} content={<TrendTooltip />} />
+          <Tooltip cursor={{ stroke: 'var(--text-tertiary)', strokeWidth: 1, strokeDasharray: '4 4' }} content={<ChartTooltip />} />
           <Area
             name="Cumulative expense"
             type="monotone"
             dataKey="cumExpense"
-            stroke="var(--accent-red)"
-            strokeWidth={2}
+            stroke={CHART_COLORS.red}
+            strokeWidth={2.5}
             fill="url(#gradCum)"
+            animationDuration={900}
+            animationEasing="ease-out"
           />
           <Area
             name="Moving average"
             type="monotone"
             dataKey="movingAvg"
-            stroke="var(--accent-purple)"
+            stroke={CHART_COLORS.purple}
             strokeWidth={2}
             strokeDasharray="6 3"
             fill="none"
             dot={false}
+            animationDuration={900}
+            animationEasing="ease-out"
           />
         </AreaChart>
       </ResponsiveContainer>

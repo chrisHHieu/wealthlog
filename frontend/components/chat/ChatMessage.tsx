@@ -1,12 +1,15 @@
 'use client'
 
 import { motion, AnimatePresence } from 'framer-motion'
-import { ChevronDown, ChevronRight, Check, Loader2, Brain, Wrench, Eye, MessageSquare, AlertCircle } from 'lucide-react'
-import { useState, useEffect, useRef } from 'react'
+import {
+  ChevronDown, ChevronRight, Check, Copy, Brain, Wrench,
+  MessageSquare, AlertCircle, RotateCcw, Sparkles,
+} from 'lucide-react'
+import { memo, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import { cn } from '@/lib/utils'
+import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
+import { useSmoothText } from '@/hooks/useSmoothText'
 import type { ChatMessage as ChatMessageType, ChatStep } from '@/types/chat'
 
 const TOOL_LABELS: Record<string, string> = {
@@ -45,20 +48,72 @@ const TOOL_LABELS: Record<string, string> = {
   query_database:               'Analyze data',
 }
 
-interface Props {
-  message: ChatMessageType
+function formatSeconds(ms: number): string {
+  const s = ms / 1000
+  return s >= 10 ? `${Math.round(s)}s` : `${s.toFixed(1)}s`
 }
 
-export function ChatMessage({ message }: Props) {
+/**
+ * Renders streamed text as a stable prefix plus a freshly-faded tail chunk —
+ * each delta remounts the tail span so new characters fade in softly.
+ */
+function FadingText({ text }: { text: string }) {
+  const prevLenRef = useRef(0)
+  const stableLen = Math.min(prevLenRef.current, text.length)
+  const stable = text.slice(0, stableLen)
+  const tail = text.slice(stableLen)
+
+  useEffect(() => {
+    prevLenRef.current = text.length
+  }, [text])
+
+  return (
+    <>
+      {stable}
+      {tail && <span key={text.length} className="chat-fade-chunk">{tail}</span>}
+    </>
+  )
+}
+
+/**
+ * One-line live ticker for the current thought. Left-aligned while the line
+ * fits; once it overflows, it stays scrolled to the tail with the left edge
+ * fading out.
+ */
+function ThinkingTicker({ text }: { text: string }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [overflowing, setOverflowing] = useState(false)
+
+  useEffect(() => {
+    const el = ref.current
+    if (!el) return
+    el.scrollLeft = el.scrollWidth
+    const isOverflowing = el.scrollWidth > el.clientWidth + 1
+    if (isOverflowing !== overflowing) setOverflowing(isOverflowing)
+  }, [text, overflowing])
+
+  return (
+    <div ref={ref} className={cn('chat-thinking-preview', overflowing && 'chat-thinking-preview--masked')}>
+      <FadingText text={text} />
+    </div>
+  )
+}
+
+interface Props {
+  message: ChatMessageType
+  onRetry?: () => void
+}
+
+export const ChatMessage = memo(function ChatMessage({ message, onRetry }: Props) {
   const isUser = message.role === 'user'
 
   if (isUser) {
     return (
       <motion.div
         className="chat-msg chat-msg-user"
-        initial={{ opacity: 0, y: 15, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
       >
         <div className="chat-user-bubble">{message.content}</div>
       </motion.div>
@@ -72,6 +127,8 @@ export function ChatMessage({ message }: Props) {
   const finalIsText = lastStep?.kind === 'text'
   const intermediateSteps = finalIsText ? steps.slice(0, -1) : steps
   const finalAnswer = finalIsText ? lastStep : null
+  // Plain content without steps: error replies and legacy persisted messages
+  const fallbackContent = steps.length === 0 && !message.isStreaming ? message.content : null
 
   // Show pending dots only before ANY event has arrived (no content, no steps).
   const showPendingDots = message.isStreaming && steps.length === 0 && !message.content
@@ -79,11 +136,11 @@ export function ChatMessage({ message }: Props) {
   return (
     <motion.div
       className="chat-msg chat-msg-ai"
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
     >
-      <div className="chat-ai-icon">
+      <div className={cn('chat-ai-icon', message.isStreaming && 'streaming')}>
         <Image src="/images/ai-avatar.png" alt="Expensep" width={32} height={32} />
       </div>
 
@@ -94,34 +151,116 @@ export function ChatMessage({ message }: Props) {
           </div>
         )}
 
-        {/* Timeline of intermediate steps (thinking → thoughts → actions → observations) */}
+        {/* Work trail: live timeline while streaming, one collapsed row when done */}
         {intermediateSteps.length > 0 && (
-          <ReactTimeline steps={intermediateSteps} />
+          message.isStreaming
+            ? <ReactTimeline steps={intermediateSteps} live />
+            : <TrailSummary steps={intermediateSteps} durationMs={message.workDurationMs} />
         )}
 
-        {/* Final answer — rendered as full markdown (incrementally during streaming) */}
+        {/* Final answer — smooth-revealed, block-memoized markdown */}
         {finalAnswer && finalAnswer.kind === 'text' && (
-          <div className={cn('chat-md', finalAnswer.streaming && 'streaming')}>
-            {finalAnswer.content ? (
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{finalAnswer.content}</ReactMarkdown>
-            ) : (
-              <div className="chat-inline-dots" aria-label="Processing">
-                <span /><span /><span />
-              </div>
-            )}
-            {finalAnswer.streaming && finalAnswer.content && <span className="chat-cursor" />}
+          <FinalAnswer step={finalAnswer} />
+        )}
+
+        {fallbackContent && (
+          <div className="chat-md">
+            <MarkdownMessage content={fallbackContent} />
           </div>
+        )}
+
+        {!message.isStreaming && (finalAnswer?.content || fallbackContent) && (
+          <MessageActions
+            content={finalAnswer?.content || fallbackContent || ''}
+            error={message.error}
+            onRetry={onRetry}
+          />
         )}
       </div>
     </motion.div>
   )
+})
+
+/** Final assistant answer: smooth character reveal + memoized markdown blocks. */
+function FinalAnswer({ step }: { step: Extract<ChatStep, { kind: 'text' }> }) {
+  const smooth = useSmoothText(step.content, !!step.streaming)
+
+  return (
+    <div className={cn('chat-md', step.streaming && 'chat-md--live')}>
+      {smooth ? (
+        <MarkdownMessage content={smooth} />
+      ) : (
+        <div className="chat-inline-dots" aria-label="Processing">
+          <span /><span /><span />
+        </div>
+      )}
+    </div>
+  )
 }
 
-function ReactTimeline({ steps }: { steps: ChatStep[] }) {
+function MessageActions({ content, error, onRetry }: { content: string; error?: boolean; onRetry?: () => void }) {
+  const [copied, setCopied] = useState(false)
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(content)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch { /* clipboard unavailable */ }
+  }
+
+  return (
+    <div className="chat-msg-actions">
+      <button className="chat-msg-action-btn" onClick={copy} title="Copy answer">
+        {copied ? <Check size={12} /> : <Copy size={12} />}
+        <span>{copied ? 'Copied' : 'Copy'}</span>
+      </button>
+      {error && onRetry && (
+        <button className="chat-msg-action-btn chat-msg-action-btn--retry" onClick={onRetry} title="Retry">
+          <RotateCcw size={12} />
+          <span>Retry</span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+/** Collapsed one-line summary of the agent's work, expandable to the full timeline. */
+function TrailSummary({ steps, durationMs }: { steps: ChatStep[]; durationMs?: number }) {
+  const [expanded, setExpanded] = useState(false)
+  const stepLabel = `${steps.length} step${steps.length > 1 ? 's' : ''}`
+
+  return (
+    <div className="chat-trail">
+      <button className="chat-trail-toggle" onClick={() => setExpanded(!expanded)}>
+        {expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />}
+        <Sparkles size={11} />
+        <span>
+          {durationMs ? `Worked for ${formatSeconds(durationMs)}` : 'Worked'} · {stepLabel}
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            style={{ overflow: 'hidden' }}
+          >
+            <ReactTimeline steps={steps} live={false} />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+function ReactTimeline({ steps, live }: { steps: ChatStep[]; live: boolean }) {
   return (
     <div className="chat-timeline">
       {steps.map((step, i) => (
-        <TimelineStep key={`${step.kind}-${step.stepId}-${i}`} step={step} />
+        <TimelineStep key={`${step.kind}-${step.stepId}-${i}`} step={step} live={live} />
       ))}
     </div>
   )
@@ -129,72 +268,49 @@ function ReactTimeline({ steps }: { steps: ChatStep[] }) {
 
 function ThinkingStep({ step }: { step: Extract<ChatStep, { kind: 'thinking' }> }) {
   const [expanded, setExpanded] = useState(false)
-  const thinkingRef = useRef<HTMLPreElement>(null)
-  const [isThinkingAutoScroll, setIsThinkingAutoScroll] = useState(true)
   const hasContent = !!step.content
-  // Track if this step was ever streaming so we know when it *finishes*
-  const wasStreamingRef = useRef(step.streaming)
-
-  useEffect(() => {
-    if (step.streaming) {
-      wasStreamingRef.current = true
-    }
-  }, [step.streaming])
-
-  // Auto-expand when streaming finishes so user sees the result immediately
-  useEffect(() => {
-    if (!step.streaming && wasStreamingRef.current && hasContent) {
-      setExpanded(true)
-    }
-  }, [step.streaming, hasContent])
-
-  const handleThinkingScroll = () => {
-    if (!thinkingRef.current) return
-    const { scrollTop, scrollHeight, clientHeight } = thinkingRef.current
-    const isAtBottom = scrollHeight - scrollTop - clientHeight < 20
-    setIsThinkingAutoScroll(isAtBottom)
+  // Single-line live ticker: the latest line of thought, tail-end only
+  const lines = step.content.split('\n')
+  let lastLine = ''
+  for (let i = lines.length - 1; i >= 0; i--) {
+    if (lines[i].trim()) { lastLine = lines[i].trim(); break }
   }
-
-  // Auto-scroll to bottom while streaming
-  useEffect(() => {
-    if (step.streaming && thinkingRef.current && isThinkingAutoScroll) {
-      thinkingRef.current.scrollTop = thinkingRef.current.scrollHeight
-    }
-  }, [step.content, step.streaming, isThinkingAutoScroll])
-
-  const showContent = step.streaming ? hasContent : expanded && hasContent
+  const preview = lastLine.slice(-140)
 
   return (
     <div className="chat-step chat-step-thinking">
       <div className="chat-step-connector">
         <div className="chat-step-dot chat-step-dot-thinking">
           {step.streaming ? (
-            <Loader2 size={11} className="chat-step-spin" />
+            <span className="chat-spinner-ring" />
           ) : (
-            <Brain size={11} />
+            <Brain size={12} />
           )}
         </div>
       </div>
       <div className="chat-step-body">
         <button
           className="chat-step-header"
-          onClick={() => hasContent && !step.streaming && setExpanded(!expanded)}
-          disabled={!hasContent || step.streaming}
+          onClick={() => hasContent && setExpanded(!expanded)}
+          disabled={!hasContent}
         >
-          {hasContent && !step.streaming && (
-            expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />
-          )}
-          <span className="chat-step-label">
-            {step.streaming ? 'Thinking...' : 'Deep thinking'}
+          {hasContent && (expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />)}
+          <span className={cn('chat-step-label', step.streaming && 'chat-shimmer-text')}>
+            {step.streaming
+              ? 'Thinking…'
+              : step.durationMs
+                ? `Thought for ${formatSeconds(step.durationMs)}`
+                : 'Deep thinking'}
           </span>
-          {!step.streaming && hasContent && (
-            <span className="chat-step-thinking-chars">
-              ~{(step.content.length / 4).toFixed(0)} tokens
-            </span>
-          )}
         </button>
+
+        {/* Streaming + collapsed: soft live preview of the current thought */}
+        {step.streaming && !expanded && hasContent && (
+          <ThinkingTicker text={preview} />
+        )}
+
         <AnimatePresence initial={false}>
-          {showContent && (
+          {expanded && hasContent && (
             <motion.div
               className="chat-step-content chat-step-thinking-content"
               initial={{ height: 0, opacity: 0 }}
@@ -202,9 +318,8 @@ function ThinkingStep({ step }: { step: Extract<ChatStep, { kind: 'thinking' }> 
               exit={{ height: 0, opacity: 0 }}
               transition={{ duration: 0.15 }}
             >
-              <pre className="chat-step-thinking-text" ref={thinkingRef} onScroll={handleThinkingScroll}>
-                {step.content}
-                {step.streaming && <span className="chat-cursor" />}
+              <pre className="chat-step-thinking-text">
+                {step.streaming ? <FadingText text={step.content} /> : step.content}
               </pre>
             </motion.div>
           )}
@@ -214,7 +329,7 @@ function ThinkingStep({ step }: { step: Extract<ChatStep, { kind: 'thinking' }> 
   )
 }
 
-function TimelineStep({ step }: { step: ChatStep }) {
+function TimelineStep({ step, live }: { step: ChatStep; live: boolean }) {
   const [expanded, setExpanded] = useState(false)
 
   if (step.kind === 'thinking') {
@@ -227,14 +342,13 @@ function TimelineStep({ step }: { step: ChatStep }) {
       <div className="chat-step chat-step-thought">
         <div className="chat-step-connector">
           <div className="chat-step-dot chat-step-dot-thought">
-            <MessageSquare size={11} />
+            <MessageSquare size={12} />
           </div>
         </div>
         <div className="chat-step-body">
           <div className="chat-step-label chat-step-label-inline">Reasoning</div>
           <div className="chat-step-thought-text">
-            {step.content}
-            {step.streaming && <span className="chat-cursor" />}
+            {step.streaming ? <FadingText text={step.content} /> : step.content}
           </div>
         </div>
       </div>
@@ -247,22 +361,24 @@ function TimelineStep({ step }: { step: ChatStep }) {
   const canExpand = hasInput || hasResult
   const label = TOOL_LABELS[step.name] ?? step.name
   const isError = step.status === 'error'
+  const isRunning = step.status === 'running'
 
   return (
-    <div className="chat-step chat-step-tool">
+    <div className={cn('chat-step chat-step-tool', isRunning && 'chat-step--running')}>
       <div className="chat-step-connector">
         <div className={cn(
           'chat-step-dot',
-          step.status === 'running' ? 'chat-step-dot-running'
+          isRunning ? 'chat-step-dot-running'
             : isError ? 'chat-step-dot-error'
             : 'chat-step-dot-done',
+          live && step.status === 'done' && 'chat-step-dot-burst',
         )}>
-          {step.status === 'running' ? (
-            <Loader2 size={11} className="chat-step-spin" />
+          {isRunning ? (
+            <span className="chat-spinner-ring" />
           ) : isError ? (
-            <AlertCircle size={11} />
+            <AlertCircle size={12} />
           ) : (
-            <Check size={11} />
+            <Check size={12} strokeWidth={2.5} />
           )}
         </div>
       </div>
@@ -274,7 +390,7 @@ function TimelineStep({ step }: { step: ChatStep }) {
         >
           {canExpand && (expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />)}
           <Wrench size={11} className="chat-step-icon" />
-          <span className="chat-step-label">{label}</span>
+          <span className={cn('chat-step-label', isRunning && 'chat-shimmer-text')}>{label}</span>
         </button>
         <AnimatePresence initial={false}>
           {expanded && canExpand && (
@@ -287,8 +403,7 @@ function TimelineStep({ step }: { step: ChatStep }) {
             >
               {hasInput && (
                 <>
-                  <div className="chat-step-observation-label chat-step-observation-label--input">
-                    <Eye size={10} />
+                  <div className="chat-step-observation-label">
                     <span>Parameters</span>
                   </div>
                   <div className="chat-step-input-params">
@@ -306,7 +421,6 @@ function TimelineStep({ step }: { step: ChatStep }) {
               {hasResult && (
                 <>
                   <div className="chat-step-observation-label" style={{ marginTop: hasInput ? 'var(--space-3)' : 0 }}>
-                    <Eye size={10} />
                     <span>Result</span>
                   </div>
                   <pre className="chat-step-result">{step.result}</pre>
@@ -319,4 +433,3 @@ function TimelineStep({ step }: { step: ChatStep }) {
     </div>
   )
 }
-

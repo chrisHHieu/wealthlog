@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { BarChart3 } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts'
 import { formatVNDCompact, formatVND } from '@/lib/utils'
 import { DashboardData } from '@/types'
@@ -56,8 +57,8 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-3)' }}>
         <div>
-          <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)', color: 'var(--text-primary)' }}>
-            Income - Expense trend
+          <div className="card-title-lg">
+            Income · Expense trend
           </div>
           <div style={{ fontSize: 'var(--text-sm)', color: 'var(--text-tertiary)', marginTop: 2 }}>
             Your monthly cash flow
@@ -76,7 +77,9 @@ export function CashFlowChart({ data, isLoading }: CashFlowChartProps) {
         <div className="skeleton" style={{ flex: 1, borderRadius: 'var(--radius-md)', minHeight: 280 }} />
       ) : chartData.length === 0 ? (
         <div className="empty-state" style={{ flex: 1 }}>
-          <span style={{ fontSize: 32 }}>📊</span>
+          <div className="icon-tile" style={{ width: 48, height: 48 }}>
+            <BarChart3 size={22} />
+          </div>
           <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>Not enough data yet</span>
         </div>
       ) : (

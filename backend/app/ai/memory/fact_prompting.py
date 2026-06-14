@@ -24,12 +24,14 @@ def topic_overlap(fact_topics: list[str], query_topics: list[str]) -> int:
 
 
 def rerank_facts_for_prompt(facts: list[dict], query_topics: list[str]) -> list[dict]:
-    """Rank facts by importance, verification, and query topic overlap."""
+    """Rank facts by effective importance, verification, and query topic overlap."""
     if not facts:
         return facts
 
     def score(fact: dict) -> int:
-        base = fact["importance"] * 10 + (
+        # effective_importance carries the read-time age penalty computed by
+        # fact_store; fall back to raw importance for dicts built elsewhere.
+        base = fact.get("effective_importance", fact["importance"]) * 10 + (
             5 if fact.get("verified_by_user") else 0
         )
         return base + topic_overlap(fact.get("topics", []), query_topics) * 20

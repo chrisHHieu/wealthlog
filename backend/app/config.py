@@ -38,8 +38,9 @@ class Settings(BaseSettings):
     # window passes through — unless a single recent turn itself exceeds
     # `recent_turn_max_chars`, in which case its earlier tool_results fall back
     # to the middle-tier limit (keeping the last result intact for final-answer
-    # grounding). `max_input_tokens` is a soft pre-send budget used only for
-    # warning logs so we can spot runaway sessions before Anthropic does.
+    # grounding). `max_input_tokens` is the pre-send budget: when the token
+    # count exceeds it, the runner recompacts the raw history with a tighter
+    # window (half the turns, recent window capped at 2) before sending.
     agent_max_turns_in_context: int = 20
     agent_keep_recent_turns: int = 3
     agent_tool_result_max_chars: int = 3000

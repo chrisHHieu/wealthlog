@@ -42,6 +42,36 @@ def _build_thinking_param(model: str) -> dict | None:
     return {"type": "enabled", "budget_tokens": settings.agent_thinking_budget}
 
 
+def _with_cache_breakpoint(messages: list[dict]) -> list[dict]:
+    """Return a copy of ``messages`` with a cache breakpoint on the last block.
+
+    System blocks already carry breakpoints, but without one on the messages
+    the conversation history is re-processed uncached on every iteration of
+    the tool loop. Marking the newest message caches the whole prefix; moving
+    the marker forward next iteration still hits the cache for earlier turns.
+    Builds shallow copies — ``claude_messages`` and the persisted tool_result
+    blocks must stay free of cache_control.
+    """
+    if not messages:
+        return messages
+    last = messages[-1]
+    content = last.get("content")
+    if isinstance(content, str):
+        new_content: list[dict] = [{
+            "type": "text",
+            "text": content,
+            "cache_control": {"type": "ephemeral"},
+        }]
+    elif isinstance(content, list) and content and isinstance(content[-1], dict):
+        new_content = [
+            *content[:-1],
+            {**content[-1], "cache_control": {"type": "ephemeral"}},
+        ]
+    else:
+        return messages
+    return [*messages[:-1], {**last, "content": new_content}]
+
+
 async def run_agent_stream(
     messages: list[dict],
     session_id: uuid.UUID | None = None,
@@ -80,6 +110,9 @@ async def run_agent_stream(
 
     max_result_chars = settings.agent_tool_result_max_chars
     thinking_param = _build_thinking_param(active_model)
+    # DeepSeek's Anthropic-compat endpoint doesn't support prompt caching;
+    # sending cache_control there risks a 400 for zero benefit.
+    cache_messages = not active_model.startswith("deepseek-")
 
     async def _run_tool(tu: dict) -> tuple[dict, str, bool]:
         """Execute one tool call in parallel; return (tu, result_text, is_error)."""
@@ -90,19 +123,14 @@ async def run_agent_stream(
         text, is_error = await execute_tool(tu["name"], inp)
         return tu, _truncate_tool_result(text, max_result_chars), is_error
 
+    raw_history = [{"role": m["role"], "content": m["content"]} for m in messages]
     claude_messages, dropped = _compact_history(
-        [{"role": m["role"], "content": m["content"]} for m in messages],
+        raw_history,
         max_turns=settings.agent_max_turns_in_context,
         keep_recent_turns=settings.agent_keep_recent_turns,
         old_tool_result_chars=settings.agent_old_turn_tool_result_chars,
         recent_turn_max_chars=settings.agent_recent_turn_max_chars,
     )
-
-    # Turns just fell off the live window. Refresh the episodic summary now so
-    # the content isn't lost until the 30-min idle sweep catches up — otherwise
-    # long back-to-back sessions leak context between the drop and next idle.
-    if dropped > 0 and session_id is not None:
-        asyncio.create_task(summarize_session(session_id))
 
     # One pre-send token count per request. We skip recounting on follow-up
     # iterations because later iterations only append tool_results to the same
@@ -114,10 +142,39 @@ async def run_agent_stream(
     if est_tokens is not None:
         logger.info("Pre-send input tokens: %d", est_tokens)
         if est_tokens > settings.agent_max_input_tokens:
-            logger.warning(
-                "Input tokens %d exceed soft budget %d — context may be unhealthy",
-                est_tokens, settings.agent_max_input_tokens,
+            # Hard enforcement: recompact from the raw history with a much
+            # tighter window. One escalation tier is enough — past this point
+            # the request is dominated by system blocks and tool schemas,
+            # which compaction can't shrink anyway.
+            claude_messages, dropped = _compact_history(
+                raw_history,
+                max_turns=max(
+                    settings.agent_keep_recent_turns,
+                    settings.agent_max_turns_in_context // 2,
+                ),
+                keep_recent_turns=min(2, settings.agent_keep_recent_turns),
+                old_tool_result_chars=min(
+                    300, settings.agent_old_turn_tool_result_chars,
+                ),
+                recent_turn_max_chars=settings.agent_recent_turn_max_chars // 2,
             )
+            re_est = await estimate_request_tokens(
+                client, active_model, system_blocks, claude_messages, tools,
+            )
+            logger.warning(
+                "Token budget enforcement: %d → %s tokens after escalated "
+                "compaction (budget %d, dropped %d turns)",
+                est_tokens,
+                re_est if re_est is not None else "?",
+                settings.agent_max_input_tokens, dropped,
+            )
+            est_tokens = re_est if re_est is not None else est_tokens
+
+    # Turns just fell off the live window. Refresh the episodic summary now so
+    # the content isn't lost until the 30-min idle sweep catches up — otherwise
+    # long back-to-back sessions leak context between the drop and next idle.
+    if dropped > 0 and session_id is not None:
+        asyncio.create_task(summarize_session(session_id))
 
     accumulated_result_chars = 0  # tracks tool result chars added after initial estimate
 
@@ -144,7 +201,10 @@ async def run_agent_stream(
             "model": active_model,
             "max_tokens": effective_max_tokens,
             "system": system_blocks,
-            "messages": claude_messages,
+            "messages": (
+                _with_cache_breakpoint(claude_messages)
+                if cache_messages else claude_messages
+            ),
             "tools": tools,
         }
         if thinking_param:
@@ -343,8 +403,8 @@ async def run_agent_stream(
         # MAX_ITERATIONS exhausted — agent was still in tool-calling mode.
         logger.warning("Agent hit MAX_ITERATIONS (%d) without finishing", MAX_ITERATIONS)
         fallback = (
-            "Tôi đã thực hiện nhiều bước nhưng chưa hoàn thành được yêu cầu. "
-            "Vui lòng thử câu hỏi cụ thể hơn hoặc chia nhỏ yêu cầu."
+            "I went through many steps but couldn't complete the request. "
+            "Please try a more specific question or break it into smaller parts."
         )
         yield sse_event(EVENT_TEXT_START, {"step_id": "fallback"})
         yield sse_event(EVENT_TEXT_DELTA, {"step_id": "fallback", "text": fallback})

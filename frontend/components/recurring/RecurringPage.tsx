@@ -2,7 +2,9 @@
 
 import React, { useState, useEffect } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
-import { Plus, Settings2, Power, PowerOff, Loader2, Trash2 } from 'lucide-react'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ArrowLeftRight, Plus, Repeat, Settings2, Power, PowerOff, Trash2 } from 'lucide-react'
+import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { formatVND, formatDateVI } from '@/lib/utils'
 import { apiDelete, apiGet, apiJson } from '@/lib/api'
 import { RecurringDrawer } from './RecurringDrawer'
@@ -26,6 +28,7 @@ export function RecurringPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [selectedItem, setSelectedItem] = useState<RecurringItem | null>(null)
   const [showDrawer, setShowDrawer] = useState(false)
+  const [deleteId, setDeleteId] = useState<string | null>(null)
 
   const fetchItems = async () => {
     setIsLoading(true)
@@ -48,18 +51,19 @@ export function RecurringPage() {
     fetchItems()
   }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this recurring schedule?')) return
-    await apiDelete(`/api/recurring/${id}`)
+  const handleDelete = async () => {
+    if (!deleteId) return
+    await apiDelete(`/api/recurring/${deleteId}`)
+    setDeleteId(null)
     fetchItems()
   }
 
-  const DAYS_VI: Record<number, string> = { 0: 'CN', 1: 'T2', 2: 'T3', 3: 'T4', 4: 'T5', 5: 'T6', 6: 'T7' }
+  const DAY_LABELS: Record<number, string> = { 0: 'Sun', 1: 'Mon', 2: 'Tue', 3: 'Wed', 4: 'Thu', 5: 'Fri', 6: 'Sat' }
 
   const freqLabel = (item: RecurringItem) => {
     if (item.daysOfWeek) {
       const days: number[] = Array.isArray(item.daysOfWeek) ? item.daysOfWeek : JSON.parse(item.daysOfWeek)
-      return days.sort((a, b) => a - b).map(d => DAYS_VI[d] ?? d).join(', ')
+      return days.sort((a, b) => a - b).map(d => DAY_LABELS[d] ?? d).join(', ')
     }
     const map: Record<string, string> = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly', yearly: 'Yearly' }
     return map[item.frequency] || item.frequency
@@ -68,34 +72,40 @@ export function RecurringPage() {
   return (
     <PageTransition>
     <div>
-      {/* Header — matches TransactionsPage style */}
-      <div style={{ marginBottom: 24 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
-          <h1 style={{ fontSize: 22, fontWeight: 700 }}>Recurring transactions</h1>
+      {/* Header */}
+      <PageHeader
+        eyebrow="Scheduled"
+        title="Recurring"
+        subtitle={
+          <>
+            Automate fixed income and expenses.
+            {items.length > 0 && (
+              <span style={{ color: 'var(--text-tertiary)' }}> • {items.filter(i => i.isActive).length} active</span>
+            )}
+          </>
+        }
+        actions={
           <button
             className="btn btn-primary"
             onClick={() => { setSelectedItem(null); setShowDrawer(true) }}
-            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
           >
             <Plus size={16} /> Add new
           </button>
-        </div>
-        <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-          Automate fixed income and expenses.
-          {items.length > 0 && (
-            <span style={{ color: 'var(--text-tertiary)' }}> • {items.filter(i => i.isActive).length} active</span>
-          )}
-        </p>
-      </div>
+        }
+      />
 
       {/* Content */}
       {isLoading ? (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '60px 0' }}>
-          <Loader2 className="spinner" size={24} style={{ color: 'var(--text-tertiary)' }} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="skeleton" style={{ height: 96, borderRadius: 'var(--radius-lg)' }} />
+          ))}
         </div>
       ) : items.length === 0 ? (
-        <div className="card" style={{ padding: '60px 24px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 16 }}>📅</div>
+        <div className="empty-state card" style={{ padding: '60px 24px' }}>
+          <div className="icon-tile" style={{ width: 56, height: 56 }}>
+            <Repeat size={26} />
+          </div>
           <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>No recurring transactions yet</div>
           <div style={{ fontSize: 13, color: 'var(--text-tertiary)', maxWidth: 360, margin: '0 auto' }}>
             Add rent, subscriptions, internet bills, salary, and other fixed items so the system can record them automatically.
@@ -118,11 +128,13 @@ export function RecurringPage() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 10 }}>
                 <div style={{
                   width: 40, height: 40, borderRadius: 10,
-                  background: item.type === 'transfer' ? 'rgba(61,142,248,0.1)' : `${item.categoryColor || '#888'}15`,
+                  background: item.type === 'transfer' ? 'var(--accent-blue-subtle)' : `${item.categoryColor || '#888'}15`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 20, flexShrink: 0,
                 }}>
-                  {item.type === 'transfer' ? '↔️' : (item.categoryIcon || '📦')}
+                  {item.type === 'transfer'
+                    ? <ArrowLeftRight size={18} style={{ color: 'var(--accent-blue)' }} />
+                    : (item.categoryIcon || '📦')}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -137,7 +149,7 @@ export function RecurringPage() {
 
               {/* Row 2: Amount left + Actions right */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{
+                <div className="num-meta" style={{
                   fontWeight: 700, fontSize: 15,
                   color: item.type.toLowerCase() === 'income' ? 'var(--accent-green)' : item.type.toLowerCase() === 'transfer' ? 'var(--accent-blue)' : 'var(--text-primary)',
                 }}>
@@ -161,7 +173,7 @@ export function RecurringPage() {
                     <Settings2 size={15} />
                   </button>
                   <button
-                    onClick={() => handleDelete(item.id)}
+                    onClick={() => setDeleteId(item.id)}
                     className="btn-icon"
                     title="Delete"
                     style={{ width: 32, height: 32, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--accent-red)' }}
@@ -185,6 +197,14 @@ export function RecurringPage() {
           }}
         />
       )}
+
+      <ConfirmModal
+        isOpen={!!deleteId}
+        onClose={() => setDeleteId(null)}
+        onConfirm={handleDelete}
+        title="Delete recurring schedule?"
+        description="This schedule will stop creating transactions. Existing transactions are kept."
+      />
     </div>
     </PageTransition>
   )

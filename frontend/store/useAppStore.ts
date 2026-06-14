@@ -24,8 +24,13 @@ interface AppState {
   // Chat State
   chatOpen: boolean
 
+  // Command Palette
+  commandPaletteOpen: boolean
+
   // Actions
   toggleSidebar: () => void
+  setCommandPalette: (open: boolean) => void
+  toggleCommandPalette: () => void
   setMobileMenu: (open: boolean) => void
   setTheme: (theme: 'dark' | 'light') => void
   toggleTheme: () => void
@@ -77,7 +82,11 @@ export const useAppStore = create<AppState>()(
       
       chatOpen: false,
 
+      commandPaletteOpen: false,
+
       toggleSidebar: () => set(s => ({ sidebarCollapsed: !s.sidebarCollapsed })),
+      setCommandPalette: (open) => set({ commandPaletteOpen: open }),
+      toggleCommandPalette: () => set(s => ({ commandPaletteOpen: !s.commandPaletteOpen })),
       setMobileMenu: (open) => set({ mobileMenuOpen: open }),
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set(s => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),

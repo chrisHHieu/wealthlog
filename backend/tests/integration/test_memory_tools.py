@@ -77,6 +77,30 @@ async def test_list_my_facts_shows_short_id_and_verified_marker(db, patch_sessio
         assert len(token) == 8 and all(c in "0123456789abcdef" for c in token)
 
 
+async def test_list_my_facts_paginates_with_offset(db, patch_session):
+    """A truncated first page must be continuable — offset reaches the tail."""
+    for i in range(5):
+        db.add(UserFact(fact=f"fact {i}", category="general", importance=10 - i))
+    await db.flush()
+
+    page1 = await _call_tool("list_my_facts", limit=2)
+    assert page1.startswith("Facts 1–2 of 5:")
+    assert "fact 0" in page1 and "fact 1" in page1
+    assert "re-call with offset=2" in page1
+
+    page2 = await _call_tool("list_my_facts", limit=2, offset=2)
+    assert page2.startswith("Facts 3–4 of 5:")
+    assert "fact 2" in page2 and "fact 3" in page2
+    assert "fact 0" not in page2  # no overlap with page 1
+
+    last = await _call_tool("list_my_facts", limit=2, offset=4)
+    assert last.startswith("Facts 5–5 of 5:")
+    assert "re-call with offset" not in last  # nothing further to page
+
+    beyond = await _call_tool("list_my_facts", limit=2, offset=10)
+    assert "only 5 stored" in beyond
+
+
 async def test_list_my_facts_does_not_bump_access_count(db, patch_session):
     """Listing is introspection — it must not pollute the recency tie-breaker."""
     db.add(UserFact(fact="x", category="general", importance=5))

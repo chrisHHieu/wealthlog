@@ -1,40 +1,70 @@
-import { AlertCircle, CheckCircle2, Target } from 'lucide-react'
+import { AlertCircle, CheckCircle2, Target, TrendingUp } from 'lucide-react'
 import { formatVNDCompact } from '@/lib/utils'
+import { PeriodSummary } from '@/types'
+import { ReportMode } from '@/hooks/useReports'
 import { ReportAnalysis } from '../reportAnalysis'
 
 interface ReportActionItemsProps {
   analysis: ReportAnalysis
+  current: PeriodSummary
+  mode: ReportMode
 }
 
-export function ReportActionItems({ analysis }: ReportActionItemsProps) {
-  const items = [
-    {
-      icon: analysis.expenseDeltaPct <= 0 ? CheckCircle2 : AlertCircle,
-      color: analysis.expenseDeltaPct <= 0 ? 'var(--accent-green)' : 'var(--accent-red)',
-      title: analysis.expenseDeltaPct <= 0 ? 'Keep expense discipline' : 'Review expense growth',
-      detail: analysis.expenseDeltaPct <= 0
-        ? 'Expenses are lower than the previous period. Keep the same spending controls.'
-        : `Expenses increased by ${analysis.expenseDeltaPct.toFixed(1)}%. Review categories with the largest increases.`,
-    },
-    {
-      icon: Target,
-      color: 'var(--accent-blue)',
-      title: analysis.topExpense ? `Watch ${analysis.topExpense.name}` : 'Define category budgets',
-      detail: analysis.topExpense
-        ? `${analysis.topExpense.name} is currently ${analysis.topExpense.pct.toFixed(1)}% of total expenses.`
-        : 'No dominant expense category is available for this period.',
-    },
-    {
-      icon: CheckCircle2,
-      color: 'var(--accent-purple)',
-      title: 'Fixed cost ratio',
-      detail: `Estimated fixed costs are ${formatVNDCompact(analysis.fixedExpense)} (${analysis.fixedExpensePct.toFixed(1)}% of expenses).`,
-    },
-  ]
+const SAVINGS_TARGET_PCT = 20
+
+export function ReportActionItems({ analysis, current, mode }: ReportActionItemsProps) {
+  const perPeriod = mode === 'month' ? 'month' : 'year'
+
+  const expenseItem = analysis.expenseDeltaPct <= 0
+    ? {
+        icon: CheckCircle2,
+        color: 'var(--accent-green)',
+        title: 'Keep expense discipline',
+        detail: `Expenses are ${formatVNDCompact(Math.abs(analysis.expenseDeltaAmount))} lower than the previous ${perPeriod}. Keep the same spending controls.`,
+      }
+    : {
+        icon: AlertCircle,
+        color: 'var(--accent-red)',
+        title: 'Review expense growth',
+        detail: `Expenses grew ${formatVNDCompact(analysis.expenseDeltaAmount)} (+${analysis.expenseDeltaPct.toFixed(1)}%) vs the previous ${perPeriod}${analysis.topIncrease ? `, led by ${analysis.topIncrease.name}` : ''}.`,
+      }
+
+  const trimItem = analysis.topExpense
+    ? {
+        icon: Target,
+        color: 'var(--accent-blue)',
+        title: `Trim ${analysis.topExpense.name}`,
+        detail: `Cutting ${analysis.topExpense.name} by 10% frees ≈ ${formatVNDCompact(analysis.topExpense.current * 0.1)} per ${perPeriod}${mode === 'month' ? ` (~${formatVNDCompact(analysis.topExpense.current * 0.1 * 12)}/year)` : ''}.`,
+      }
+    : {
+        icon: Target,
+        color: 'var(--accent-blue)',
+        title: 'Define category budgets',
+        detail: 'No dominant expense category is available for this period.',
+      }
+
+  const savingsGap = current.income * (SAVINGS_TARGET_PCT / 100) - current.savings
+  const savingsItem = current.savingsRate >= SAVINGS_TARGET_PCT
+    ? {
+        icon: CheckCircle2,
+        color: 'var(--accent-green)',
+        title: `Savings rate above ${SAVINGS_TARGET_PCT}%`,
+        detail: `You saved ${current.savingsRate.toFixed(1)}% of income this ${perPeriod} — ahead of the ${SAVINGS_TARGET_PCT}% guideline.`,
+      }
+    : {
+        icon: TrendingUp,
+        color: 'var(--accent-gold)',
+        title: `Reach a ${SAVINGS_TARGET_PCT}% savings rate`,
+        detail: current.income > 0
+          ? `Saving ${formatVNDCompact(Math.max(0, savingsGap))} more this ${perPeriod} would lift your rate from ${current.savingsRate.toFixed(1)}% to ${SAVINGS_TARGET_PCT}%.`
+          : 'Record income for this period to track your savings rate.',
+      }
+
+  const items = [expenseItem, trimItem, savingsItem]
 
   return (
     <section className="card" style={{ padding: 20 }}>
-      <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 14 }}>Action items</div>
+      <div className="card-title" style={{ marginBottom: 14 }}>Action items</div>
       <div className="report-action-grid">
         {items.map((item) => {
           const Icon = item.icon

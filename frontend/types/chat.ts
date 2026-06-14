@@ -4,6 +4,8 @@ export type ChatStep =
       stepId: string
       content: string
       streaming?: boolean
+      startedAt?: number
+      durationMs?: number
     }
   | {
       kind: 'text'
@@ -29,6 +31,10 @@ export interface ChatMessage {
   timestamp: Date
   steps?: ChatStep[]
   isStreaming?: boolean
+  /** Total wall-clock time of the agent run, set when the stream completes. */
+  workDurationMs?: number
+  /** Set when the request failed; enables the retry action. */
+  error?: boolean
 }
 
 export interface ModelOption {

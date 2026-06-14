@@ -81,7 +81,7 @@ export function ComparisonKPIs({ current, previous, isLoading }: ComparisonKPIsP
               width: 32,
               height: 32,
               borderRadius: 8,
-              background: `${kpi.color}15`,
+              background: `color-mix(in srgb, ${kpi.color} 10%, transparent)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -92,7 +92,7 @@ export function ComparisonKPIs({ current, previous, isLoading }: ComparisonKPIsP
             <span style={{ fontSize: 13, color: 'var(--text-secondary)', fontWeight: 500 }}>{kpi.label}</span>
           </div>
 
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, whiteSpace: 'nowrap' }}>
+          <div className="num-meta" style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)', marginBottom: 8, whiteSpace: 'nowrap' }}>
             {isLoading
               ? <div className="skeleton" style={{ height: 26, width: 100 }} />
               : (kpi.text ?? formatVNDCompact(kpi.value ?? 0))}
@@ -108,7 +108,7 @@ export function ComparisonKPIs({ current, previous, isLoading }: ComparisonKPIsP
                 borderRadius: 6,
                 fontSize: 11,
                 fontWeight: 650,
-                background: kpi.positive ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.12)',
+                background: kpi.positive ? 'var(--accent-green-muted)' : 'var(--accent-red-muted)',
                 color: kpi.positive ? 'var(--accent-green)' : 'var(--accent-red)',
                 whiteSpace: 'nowrap',
               }}>

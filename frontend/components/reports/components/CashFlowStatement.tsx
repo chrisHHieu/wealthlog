@@ -23,7 +23,7 @@ function FlowRow({ icon, name, amount, color, index }: {
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{
           width: 28, height: 28, borderRadius: 7,
-          background: `${color}15`,
+          background: `color-mix(in srgb, ${color} 8%, transparent)`,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
           fontSize: 14, flexShrink: 0,
         }}>
@@ -52,7 +52,7 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
 
   return (
     <div className="card" style={{ padding: 20 }}>
-      <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Cash flow statement</div>
+      <div className="card-title" style={{ marginBottom: 4 }}>Cash flow statement</div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 20 }}>
         Income and expense overview by category
       </div>
@@ -109,8 +109,8 @@ export function CashFlowStatement({ data, isLoading }: CashFlowStatementProps) {
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '14px 16px', borderRadius: 10,
-        background: `${netColor}10`,
-        border: `1px solid ${netColor}30`,
+        background: `color-mix(in srgb, ${netColor} 6%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${netColor} 18%, transparent)`,
       }}>
         <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>
           Net cash flow

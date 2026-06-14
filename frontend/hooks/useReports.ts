@@ -20,6 +20,22 @@ export function navigateMonth(yyyymm: string, delta: number): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
 }
 
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** Backend emits "T1".."T12" for yearly points; map to English month names. */
+function localizeLabel(label: string): string {
+  const m = /^T(\d{1,2})$/.exec(label)
+  return m ? MONTH_LABELS[Number(m[1]) - 1] ?? label : label
+}
+
+function localizeLabels(data: ReportsData): ReportsData {
+  return {
+    ...data,
+    chartData: data.chartData.map(p => ({ ...p, label: localizeLabel(p.label) })),
+    trendData: data.trendData.map(p => ({ ...p, label: localizeLabel(p.label) })),
+  }
+}
+
 const emptyData: ReportsData = {
   current: { income: 0, expense: 0, savings: 0, savingsRate: 0 },
   previous: { income: 0, expense: 0, savings: 0, savingsRate: 0 },
@@ -38,11 +54,11 @@ export function useReports() {
 
   const { data = emptyData, isLoading } = useQuery<ReportsData>({
     queryKey: queryKeys.reports(mode, selectedMonth, selectedYear),
-    queryFn: () => apiGet<ReportsData>('/api/reports', {
+    queryFn: async () => localizeLabels(await apiGet<ReportsData>('/api/reports', {
       mode,
       month: mode === 'month' ? selectedMonth : undefined,
       year: mode === 'year' ? selectedYear : undefined,
-    }),
+    })),
   })
 
   return {

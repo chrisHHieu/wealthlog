@@ -1,4 +1,4 @@
-import { ArrowRight } from 'lucide-react'
+import { ArrowRight, ReceiptText } from 'lucide-react'
 import Link from 'next/link'
 import { formatVND } from '@/lib/utils'
 import { DashboardData } from '@/types'
@@ -19,7 +19,7 @@ export function RecentTransactions({ data, isLoading }: RecentTransactionsProps)
   return (
     <div className="card" style={{ padding: 'var(--space-6)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-lg)' }}>Recent transactions</div>
+        <div className="card-title-lg">Recent transactions</div>
         <Link href="/transactions" className="btn btn-ghost btn-sm" style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--accent-blue)' }}>
           View all <ArrowRight size={14} />
         </Link>
@@ -31,7 +31,9 @@ export function RecentTransactions({ data, isLoading }: RecentTransactionsProps)
         </div>
       ) : txs.length === 0 ? (
         <div className="empty-state" style={{ flex: 1 }}>
-          <span style={{ fontSize: 32 }}>📝</span>
+          <div className="icon-tile" style={{ width: 48, height: 48 }}>
+            <ReceiptText size={22} />
+          </div>
           <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-2)' }}>No transactions yet</span>
         </div>
       ) : (

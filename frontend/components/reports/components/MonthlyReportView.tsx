@@ -1,7 +1,9 @@
 import { ScrollReveal } from '@/components/ui/ScrollReveal'
 import { ReportsData } from '@/types'
 import { ReportAnalysis } from '../reportAnalysis'
+import { BudgetVsActual } from './BudgetVsActual'
 import { CashFlowStatement } from './CashFlowStatement'
+import { DailySpendingHeatmap } from './DailySpendingHeatmap'
 import { IncomeExpenseChart } from './IncomeExpenseChart'
 import { PeriodComparison } from './PeriodComparison'
 import { ReportActionItems } from './ReportActionItems'
@@ -13,9 +15,10 @@ interface MonthlyReportViewProps {
   data: ReportsData
   analysis: ReportAnalysis
   isLoading: boolean
+  selectedMonth: string
 }
 
-export function MonthlyReportView({ data, analysis, isLoading }: MonthlyReportViewProps) {
+export function MonthlyReportView({ data, analysis, isLoading, selectedMonth }: MonthlyReportViewProps) {
   return (
     <>
       <ScrollReveal>
@@ -26,6 +29,13 @@ export function MonthlyReportView({ data, analysis, isLoading }: MonthlyReportVi
       </ScrollReveal>
 
       <ReportHighlights analysis={analysis} mode="month" />
+
+      <ScrollReveal>
+        <div className="reports-budget-grid">
+          <BudgetVsActual month={selectedMonth} expenseByCategory={data.expenseByCategory} />
+          <DailySpendingHeatmap month={selectedMonth} trendData={data.trendData} isLoading={isLoading} />
+        </div>
+      </ScrollReveal>
 
       <ScrollReveal delay={0.05}>
         <PeriodComparison
@@ -42,13 +52,20 @@ export function MonthlyReportView({ data, analysis, isLoading }: MonthlyReportVi
         </div>
       </ScrollReveal>
 
-      <ReportActionItems analysis={analysis} />
+      <ReportActionItems analysis={analysis} current={data.current} mode="month" />
 
       <style jsx>{`
         .reports-chart-grid {
           display: grid;
           grid-template-columns: minmax(0, 3fr) minmax(360px, 2fr);
           gap: var(--space-5);
+        }
+
+        .reports-budget-grid {
+          display: grid;
+          grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+          gap: var(--space-5);
+          align-items: start;
         }
 
         .reports-detail-grid {
@@ -60,6 +77,7 @@ export function MonthlyReportView({ data, analysis, isLoading }: MonthlyReportVi
 
         @media (max-width: 1280px) {
           .reports-chart-grid,
+          .reports-budget-grid,
           .reports-detail-grid {
             grid-template-columns: 1fr;
           }

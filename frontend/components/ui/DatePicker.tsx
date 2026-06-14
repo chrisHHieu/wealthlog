@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react'
 import { formatDateVI } from '@/lib/utils'
@@ -114,7 +114,7 @@ export function DatePicker({ value, onChange, placeholder = 'Select date...', di
             style={{
               position: 'absolute', top: 'calc(100% + 6px)', left: 0,
               background: 'var(--bg-secondary)', border: '1px solid var(--surface-border)',
-              borderRadius: 12, boxShadow: 'var(--shadow-dropdown)', zIndex: 100,
+              borderRadius: 12, boxShadow: 'var(--elevation-3)', zIndex: 100,
               width: 280, padding: '16px', transformOrigin: 'top',
             }}
           >

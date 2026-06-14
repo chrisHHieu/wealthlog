@@ -18,13 +18,13 @@ from app.services.recurring_sync import process_recurring
 
 ASSET_TYPES = {"cash", "bank", "ewallet", "investment", "savings"}
 ASSET_LABELS = {
-    "cash": "Tiền mặt",
-    "bank": "Ngân hàng",
-    "ewallet": "Ví điện tử",
-    "investment": "Đầu tư",
-    "savings": "Tiết kiệm",
+    "cash": "Cash",
+    "bank": "Bank",
+    "ewallet": "E-wallet",
+    "investment": "Investment",
+    "savings": "Savings",
 }
-LIABILITY_LABELS = {"debt": "Nợ vay"}
+LIABILITY_LABELS = {"debt": "Debt/Loan"}
 
 
 def _month_str(d: date) -> str:
@@ -216,7 +216,7 @@ def _category_breakdown(rows, selected_month: str) -> tuple[list[dict], dict[str
         if key not in cat_map:
             cat_map[key] = {
                 "categoryId": key,
-                "categoryName": r.category_name or "Khác",
+                "categoryName": r.category_name or "Other",
                 "categoryIcon": r.category_icon or "📦",
                 "categoryColor": r.category_color or "#6b7280",
                 "budgetGroup": r.budget_group.value if r.budget_group else None,
@@ -249,7 +249,7 @@ def _recent_transactions(rows) -> list[dict]:
             "amount": r.amount,
             "description": r.description,
             "date": r.date,
-            "categoryName": r.category_name or "Khác",
+            "categoryName": r.category_name or "Other",
             "categoryIcon": r.category_icon or "📦",
             "categoryColor": r.category_color or "#6b7280",
         }
@@ -263,7 +263,7 @@ def _budget_progress(rows, cat_map: dict[str, dict]) -> list[dict]:
         spent = cat_map.get(str(b.category_id), {}).get("total", 0)
         items.append({
             "categoryId": str(b.category_id),
-            "categoryName": b.category_name or "Khác",
+            "categoryName": b.category_name or "Other",
             "categoryIcon": b.category_icon or "📦",
             "categoryColor": b.category_color or "#6b7280",
             "budgetAmount": b.amount,

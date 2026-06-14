@@ -132,6 +132,43 @@ CONSOLIDATION_PROMPT = (
 )
 
 
+# ── Dreaming pass (daily — rewrites expired facts with real outcomes) ────────
+
+DREAMING_PROMPT = (
+    "You are the nightly memory-consolidation ('dreaming') pass of a "
+    "personal-finance assistant. Above you have the user's current financial "
+    "data, their EXPIRED time-bound memory facts, and their OVERDUE "
+    "commitments.\n\n"
+    "Expired facts are deleted tonight unless you rewrite them. "
+    "For each expired fact decide its fate:\n"
+    "- 'rewrite' — still valuable as history. Restate it in past tense with "
+    "the real outcome, citing the financial data when it provides evidence "
+    "(e.g. 'Saving 50M for a car by Jun 2026' becomes "
+    "'Saved 42M of the 50M car goal by Jun 2026 — fell short'). "
+    "If the data says nothing about it, state the outcome as unknown.\n"
+    "- 'drop' — trivial, redundant, or no longer informative once expired.\n\n"
+    "For each overdue commitment, emit 'resolve_commitment' with status "
+    "'done' when the data shows it happened, or 'abandoned' when it clearly "
+    "lapsed or was replaced. Omit the item to leave it pending.\n\n"
+    "RULES:\n"
+    "- Return a JSON array. Item shapes:\n"
+    "  {\"action\": \"rewrite\", \"index\": <1-based fact index>, "
+    "\"fact\": \"...\",\n"
+    "   \"importance\": 1-10, \"confidence\": 1-10,\n"
+    "   \"topics\": 1-3 tags chosen ONLY from: "
+    f"{_TOPIC_LIST_STR}}}\n"
+    "  {\"action\": \"drop\", \"index\": <1-based fact index>}\n"
+    "  {\"action\": \"resolve_commitment\", "
+    "\"index\": <1-based commitment index>,\n"
+    "   \"status\": \"done\" or \"abandoned\"}\n"
+    "- Rewritten facts are history, not active plans: importance 3-6 unless "
+    "it marks a major life event; confidence reflects evidence strength.\n"
+    "- Keep each fact's original language.\n"
+    "- Give every expired fact exactly one 'rewrite' or 'drop' decision.\n"
+    "- Return ONLY valid JSON, no explanation. [] if there is nothing to do."
+)
+
+
 # ── Session summarization (fires on idle sessions via Haiku) ─────────────────
 
 SUMMARY_PROMPT = (

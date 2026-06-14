@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion'
-import { Edit2, Trash2 } from 'lucide-react'
+import { Edit2, Trash2, X } from 'lucide-react'
 import { formatVND, formatDateVI } from '@/lib/utils'
 import { Transaction } from '@/types'
 
@@ -23,7 +23,9 @@ export function DetailSidePanel({ transaction, onClose, onEdit, onDelete }: Deta
           <div className="card" style={{ padding: '20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <span style={{ fontWeight: 600, fontSize: 15 }}>Details</span>
-              <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }}>✕</button>
+              <button onClick={onClose} className="btn btn-ghost btn-sm" style={{ padding: '4px 8px' }} aria-label="Close">
+                <X size={14} />
+              </button>
             </div>
 
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
@@ -36,7 +38,7 @@ export function DetailSidePanel({ transaction, onClose, onEdit, onDelete }: Deta
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {[
-                { label: 'Type', value: transaction.type === 'income' ? '💹 Income' : transaction.type === 'expense' ? '💸 Expense' : '🔄 Transfer' },
+                { label: 'Type', value: transaction.type === 'income' ? 'Income' : transaction.type === 'expense' ? 'Expense' : 'Transfer' },
                 { label: 'Date', value: formatDateVI(transaction.date) },
                 { label: 'Category', value: transaction.categoryName ?? 'Uncategorized' },
                 { label: 'Accounts', value: `${transaction.accountIcon ?? ''} ${transaction.accountName ?? 'N/A'}` },

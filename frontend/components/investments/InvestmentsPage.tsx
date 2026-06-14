@@ -2,16 +2,20 @@
 
 import { useState } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
+import { ChartTooltip } from '@/lib/chartTheme'
 import { Portal } from '@/components/ui/Portal'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, TrendingUp, TrendingDown, Edit2, Trash2 } from 'lucide-react'
+import { AlertTriangle, Plus, Edit2, Trash2, TrendingUp, X } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
-import { formatVND, formatVNDCompact, formatDateVI, parseShorthandAmount, formatAmountLive, getToday } from '@/lib/utils'
+import { formatVNDCompact, formatDateVI, parseShorthandAmount, formatAmountLive, getToday } from '@/lib/utils'
 import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts'
 import { Select } from '@/components/ui/Select'
 import { DatePicker } from '@/components/ui/DatePicker'
+import { Stat } from '@/components/ui/Stat'
+import { TrendBadge } from '@/components/ui/Badge'
 
 interface Investment {
   id: string
@@ -26,13 +30,13 @@ interface Investment {
 }
 
 const INVESTMENT_TYPE_LABELS: Record<string, string> = {
-  stock: '📊 Stocks',
-  etf: '📈 ETF/Fund',
-  gold: '🥇 Gold',
-  realestate: '🏠 Real estate',
-  savings: '🏦 Savings',
-  crypto: '₿ Crypto',
-  other: '💼 Other',
+  stock: 'Stocks',
+  etf: 'ETF/Fund',
+  gold: 'Gold',
+  realestate: 'Real estate',
+  savings: 'Savings',
+  crypto: 'Crypto',
+  other: 'Other',
 }
 
 const INVESTMENT_TYPES = Object.entries(INVESTMENT_TYPE_LABELS)
@@ -140,46 +144,37 @@ export function InvestmentsPage() {
   return (
     <PageTransition>
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Investment</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{investments.length} investment assets</p>
-        </div>
-        <button id="add-investment-btn" onClick={openAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={15} /> Add asset
-        </button>
-      </div>
+      <PageHeader
+        eyebrow="Portfolio"
+        title="Investments"
+        subtitle={`${investments.length} investment ${investments.length === 1 ? 'asset' : 'assets'}`}
+        actions={
+          <button id="add-investment-btn" onClick={openAdd} className="btn btn-primary">
+            <Plus size={15} /> Add asset
+          </button>
+        }
+      />
 
       {/* Summary */}
-      <div className="investment-summary-grid">
-        <div className="kpi-card" style={{ background: 'linear-gradient(135deg, rgba(0,200,150,0.08), transparent)', borderColor: 'rgba(0,200,150,0.2)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total current value</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-green)' }}>{formatVNDCompact(totalValue)}</div>
-        </div>
-        <div className="kpi-card" style={{
-          background: `linear-gradient(135deg, ${totalProfit >= 0 ? 'rgba(0,200,150,0.08)' : 'rgba(255,77,109,0.08)'}, transparent)`,
-          borderColor: totalProfit >= 0 ? 'rgba(0,200,150,0.2)' : 'rgba(255,77,109,0.2)',
-        }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total gain/loss</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {totalProfit >= 0 ? <TrendingUp size={18} style={{ color: 'var(--accent-green)' }} /> : <TrendingDown size={18} style={{ color: 'var(--accent-red)' }} />}
-            <div style={{ fontSize: 22, fontWeight: 700, color: totalProfit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)' }}>
-              {totalProfit >= 0 ? '+' : ''}{formatVNDCompact(totalProfit)}
-            </div>
-          </div>
-          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4 }}>
-            ROI: {parseFloat(totalROI) >= 0 ? '+' : ''}{totalROI}%
-          </div>
-        </div>
-        <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Invested capital</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{formatVNDCompact(totalCost)}</div>
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div className="stat-strip">
+          <Stat label="Total current value" value={formatVNDCompact(totalValue)} size="lg" />
+          <Stat
+            label="Total gain/loss"
+            value={`${totalProfit >= 0 ? '+' : ''}${formatVNDCompact(totalProfit)}`}
+            color={totalProfit >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}
+            size="lg"
+            badge={<TrendBadge pctChange={totalROI} positiveIsGood />}
+          />
+          <Stat label="Invested capital" value={formatVNDCompact(totalCost)} size="lg" />
         </div>
       </div>
 
       {investments.length === 0 ? (
         <div className="empty-state card" style={{ padding: '60px 24px' }}>
-          <span style={{ fontSize: 56 }}>📈</span>
+          <div className="icon-tile" style={{ width: 56, height: 56 }}>
+            <TrendingUp size={26} />
+          </div>
           <p style={{ fontSize: 16, fontWeight: 600 }}>No investment assets yet</p>
           <p style={{ fontSize: 13 }}>Add stocks, gold, ETFs, and other assets to track your portfolio</p>
           <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 12 }}><Plus size={15} /> Add investment asset</button>
@@ -212,11 +207,11 @@ export function InvestmentsPage() {
                     <tr key={inv.id}>
                       <td>
                         <div style={{ fontWeight: 600, fontSize: 13 }}>
-                          {inv.symbol && <span style={{ fontSize: 11, color: 'var(--accent-green)', marginRight: 4 }}>{inv.symbol}</span>}
+                          {inv.symbol && <span style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--accent-green)', marginRight: 4 }}>{inv.symbol}</span>}
                           {inv.name}
                         </div>
                         <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
-                          {INVESTMENT_TYPE_LABELS[inv.type]} · Mua {formatDateVI(inv.buyDate)}
+                          {INVESTMENT_TYPE_LABELS[inv.type]} · Bought {formatDateVI(inv.buyDate)}
                         </div>
                       </td>
                       <td style={{ fontSize: 13 }}>{inv.quantity.toLocaleString()}</td>
@@ -249,13 +244,13 @@ export function InvestmentsPage() {
 
           {/* Allocation Pie */}
           <div className="card" style={{ padding: '20px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Portfolio allocation</div>
+            <div className="card-title" style={{ marginBottom: 16 }}>Portfolio allocation</div>
             <ResponsiveContainer width="100%" height={180}>
               <PieChart>
-                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value">
+                <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={80} paddingAngle={2} dataKey="value" stroke="var(--bg-secondary)" strokeWidth={2} animationDuration={800} animationEasing="ease-out">
                   {pieData.map((entry, i) => <Cell key={i} fill={entry.color} />)}
                 </Pie>
-                <Tooltip cursor={{ fill: 'transparent' }} formatter={(v) => [formatVND(Number(v)), '']} contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--surface-border)', borderRadius: 8, fontSize: 12 }} />
+                <Tooltip cursor={{ fill: 'transparent' }} content={<ChartTooltip />} />
               </PieChart>
             </ResponsiveContainer>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
@@ -263,7 +258,7 @@ export function InvestmentsPage() {
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: p.color, flexShrink: 0 }} />
                   <span style={{ flex: 1, color: 'var(--text-secondary)' }}>{p.name}</span>
-                  <span style={{ fontWeight: 600 }}>{totalValue > 0 ? ((p.value / totalValue) * 100).toFixed(1) : 0}%</span>
+                  <span className="num-meta" style={{ fontWeight: 600 }}>{totalValue > 0 ? ((p.value / totalValue) * 100).toFixed(1) : 0}%</span>
                 </div>
               ))}
             </div>
@@ -280,7 +275,9 @@ export function InvestmentsPage() {
             <motion.div className="drawer" style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h2 style={{ fontSize: 17, fontWeight: 600 }}>{editInv ? 'Edit asset' : 'Add investment asset'}</h2>
-                <button onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }}>✕</button>
+                <button onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }} aria-label="Close">
+                  <X size={16} />
+                </button>
               </div>
 
               <div style={{ padding: '20px 24px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -306,7 +303,7 @@ export function InvestmentsPage() {
                     <input type="number" value={formQty} onChange={e => setFormQty(e.target.value)} className="input" />
                   </div>
                   <div style={{ zIndex: 9 }}>
-                    <label className="label">Date mua</label>
+                    <label className="label">Buy date</label>
                     <DatePicker value={formBuyDate} onChange={setFormBuyDate} disableFuture={true} />
                   </div>
                 </div>
@@ -345,8 +342,10 @@ export function InvestmentsPage() {
           <>
             <motion.div className="overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setDeleteConfirm(null)} />
             <motion.div className="modal" style={{ padding: '28px', textAlign: 'center' }} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}>
-              <div style={{ fontSize: 40, marginBottom: 12 }}>⚠️</div>
-              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Delete investment assets?</h3>
+              <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--accent-red-subtle)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 16px' }}>
+                <AlertTriangle size={24} style={{ color: 'var(--accent-red)' }} />
+              </div>
+              <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 8 }}>Delete investment asset?</h3>
               <p style={{ fontSize: 13, color: 'var(--text-secondary)', marginBottom: 24 }}>This action cannot be undone.</p>
               <div style={{ display: 'flex', gap: 10 }}>
                 <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setDeleteConfirm(null)}>Cancel</button>
@@ -358,13 +357,6 @@ export function InvestmentsPage() {
       </AnimatePresence>
       </Portal>
       <style jsx>{`
-        .investment-summary-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
         .investment-content-grid {
           display: grid;
           grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);

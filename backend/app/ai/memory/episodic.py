@@ -10,6 +10,7 @@ import anthropic
 from sqlalchemy import or_, select
 from sqlalchemy.dialects.postgresql import insert
 
+from app.ai.memory.fact_scoring import _TOPIC_ALIASES
 from app.ai.memory.facts import ensure_review_on_session_end
 from app.ai.memory.prompts import SUMMARY_PROMPT
 from app.ai.model_registry import get_structured_model, resolve_client_kwargs
@@ -212,17 +213,42 @@ _TOKEN_RE = re.compile(r"[\w]+", re.UNICODE)
 
 
 def _extract_query_topics(user_message: str) -> list[str]:
-    """Tokenize a user message into surface-form tokens for topic-overlap matching."""
+    """Tokenize a user message into topic candidates for overlap matching.
+
+    Stored topics are matched as whole array elements by the ``?|`` filter and
+    many are two-word phrases ("thu nhập", "tiết kiệm"), so single tokens alone
+    can't reach them. Three candidate kinds are emitted:
+    - surface tokens — match single-word free-form topics
+    - adjacent-token bigrams — match two-word phrases written out by the user
+    - canonical alias expansions — write-path normalizes "salary"/"lương" to
+      "thu nhập", so the read path must expand the same aliases to reach them
+    """
     if not user_message:
         return []
     normalized = unicodedata.normalize("NFC", user_message).lower()
+    tokens = [t for t in _TOKEN_RE.findall(normalized) if len(t) >= _MIN_TOKEN_LEN]
+
     seen: list[str] = []
     seen_set: set[str] = set()
-    for tok in _TOKEN_RE.findall(normalized):
-        if len(tok) < _MIN_TOKEN_LEN or tok in seen_set:
-            continue
-        seen_set.add(tok)
-        seen.append(tok)
+
+    def _add(term: str) -> None:
+        if term not in seen_set:
+            seen_set.add(term)
+            seen.append(term)
+
+    for tok in tokens:
+        _add(tok)
+    for a, b in zip(tokens, tokens[1:]):
+        _add(f"{a} {b}")
+
+    # The canonical phrase serves the ?| element match; its individual words
+    # serve the word-level overlap scorer in fact_prompting.
+    for term in list(seen):
+        canonical = _TOPIC_ALIASES.get(term)
+        if canonical:
+            _add(canonical)
+            for word in canonical.split():
+                _add(word)
     return seen
 
 

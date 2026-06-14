@@ -138,6 +138,63 @@ async def test_get_user_facts_exposes_importance(db: AsyncSession):
     assert facts[0]["importance"] == 9
 
 
+async def test_stale_fact_sinks_below_fresh_one(db: AsyncSession):
+    """Lazy decay: an old importance-8 fact must lose to a fresh importance-6."""
+    from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
+
+    old = datetime.now(UTC) - timedelta(days=120)  # 8 - 120//30 = effective 4
+    db.add(UserFact(fact="stale big", category="goal", importance=8, updated_at=old))
+    db.add(UserFact(fact="fresh mid", category="goal", importance=6))
+    await db.flush()
+
+    with _patch_session(db):
+        facts = await memory_module.get_user_facts(track_access=False)
+
+    assert [f["fact"] for f in facts] == ["fresh mid", "stale big"]
+    assert facts[0]["effective_importance"] == 6
+    assert facts[1]["effective_importance"] == 4
+    assert facts[1]["importance"] == 8  # stored signal stays intact
+
+
+async def test_verified_fact_immune_to_staleness(db: AsyncSession):
+    from app.ai.memory import facts as memory_module
+    from app.models.user_fact import UserFact
+
+    old = datetime.now(UTC) - timedelta(days=365)
+    db.add(UserFact(
+        fact="old but confirmed", category="goal", importance=7,
+        verified_by_user=True, updated_at=old,
+    ))
+    db.add(UserFact(fact="fresh guess", category="goal", importance=6))
+    await db.flush()
+
+    with _patch_session(db):
+        facts = await memory_module.get_user_facts(track_access=False)
+
+    assert facts[0]["fact"] == "old but confirmed"
+    assert facts[0]["effective_importance"] == 7
+
+
+async def test_access_bump_does_not_reset_staleness_clock(db: AsyncSession):
+    """Injection is not a content change — updated_at must survive the bump,
+    despite the column's onupdate default."""
+    from app.ai.memory import facts as memory_module
+    from app.ai.memory.fact_scoring import ensure_aware
+    from app.models.user_fact import UserFact
+
+    old = datetime.now(UTC) - timedelta(days=100)
+    db.add(UserFact(fact="aging fact", category="general", importance=5, updated_at=old))
+    await db.flush()
+
+    with _patch_session(db):
+        await memory_module.get_user_facts()  # track_access=True bumps
+
+    row = (await db.execute(select(UserFact))).scalar_one()
+    assert row.access_count == 1
+    assert abs((ensure_aware(row.updated_at) - old).total_seconds()) < 5
+
+
 # ── save_user_fact persists importance ─────────────────────────────────────
 
 

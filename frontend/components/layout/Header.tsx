@@ -78,7 +78,7 @@ export function Header() {
         }}>
           {pageTitle}
           {pathname === '/' && (
-            <span> - {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
+            <span className="mono-meta"> · {now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</span>
           )}
         </div>
       </div>

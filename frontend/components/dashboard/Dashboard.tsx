@@ -1,6 +1,8 @@
 'use client'
 
+import { useState } from 'react'
 import { useDashboard } from '@/hooks/useDashboard'
+import { MonthNavigator } from '@/components/ui/MonthNavigator'
 import { KPICards } from './components/KPICards'
 import { CashFlowChart } from './components/CashFlowChart'
 import { SpendingBreakdown } from './components/SpendingBreakdown'
@@ -12,7 +14,7 @@ import { AssetLiability } from './components/AssetLiability'
 import { DashboardSummary } from './components/DashboardSummary'
 import { DashboardActionCenter } from './components/DashboardActionCenter'
 import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
-import { ScrollReveal } from '@/components/ui/ScrollReveal'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { buildDashboardInsights } from './dashboardInsights'
 
 function getCurrentMonthStr() {
@@ -21,14 +23,23 @@ function getCurrentMonthStr() {
 }
 
 export function Dashboard() {
-  const selectedMonth = getCurrentMonthStr()
+  const [selectedMonth, setSelectedMonth] = useState(getCurrentMonthStr)
   const { data, isLoading, activeGoals, stats } = useDashboard('12months', selectedMonth)
   const insights = buildDashboardInsights(data)
 
   return (
     <PageTransition>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-5)', paddingBottom: 'var(--space-10)' }}>
-        {/* Row 1: KPI Cards - Hero Net Worth + 3 smaller cards */}
+        <StaggerItem>
+          <PageHeader
+            eyebrow="Dashboard"
+            title="Overview"
+            className="page-header--flush"
+            actions={<MonthNavigator value={selectedMonth} onChange={setSelectedMonth} />}
+          />
+        </StaggerItem>
+
+        {/* Hero: net worth + month-to-date figures in one card */}
         <StaggerItem>
           <KPICards
             data={data}
@@ -38,37 +49,38 @@ export function Dashboard() {
           />
         </StaggerItem>
 
-        <ScrollReveal>
+        {/* Needs attention: narrative summary + priority actions */}
+        <StaggerItem>
           <div className="dashboard-summary-row">
             <DashboardSummary data={data} insights={insights} isLoading={isLoading} />
             <DashboardActionCenter insights={insights} isLoading={isLoading} />
           </div>
-        </ScrollReveal>
+        </StaggerItem>
 
         {/* Row 2: Cash Flow (3fr) + Spending Donut (2fr) */}
-        <ScrollReveal>
+        <StaggerItem>
           <div className="dashboard-row-2">
             <CashFlowChart data={data} isLoading={isLoading} />
             <SpendingBreakdown data={data} isLoading={isLoading} />
           </div>
-        </ScrollReveal>
+        </StaggerItem>
 
         {/* Row 3: Budget + Goals + Upcoming Bills */}
-        <ScrollReveal delay={0.05}>
+        <StaggerItem>
           <div className="dashboard-row-3">
             <BudgetProgress data={data} isLoading={isLoading} />
             <GoalsSnapshot goals={activeGoals} isLoading={isLoading} />
             <UpcomingBills data={data} isLoading={isLoading} />
           </div>
-        </ScrollReveal>
+        </StaggerItem>
 
         {/* Row 4: Recent Transactions (3fr) + Asset & Liability (2fr) */}
-        <ScrollReveal delay={0.1}>
+        <StaggerItem>
           <div className="dashboard-row-2">
             <RecentTransactions data={data} isLoading={isLoading} />
             <AssetLiability data={data} isLoading={isLoading} />
           </div>
-        </ScrollReveal>
+        </StaggerItem>
       </div>
 
       <style jsx>{`

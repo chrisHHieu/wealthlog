@@ -1,10 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { Stat } from '@/components/ui/Stat'
 import { Brain, Trash2, CheckCircle, Tag, Shield, Filter } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
 import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { useMemoryFacts, useDeleteFact, useVerifyFact, UserFact } from '@/hooks/useMemoryFacts'
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -24,8 +26,8 @@ const CATEGORY_COLORS: Record<string, string> = {
   goal:        'var(--accent-green)',
   context:     'var(--accent-gold)',
   pattern:     'var(--accent-amber)',
-  commitment:  'var(--accent-red, #ef4444)',
-  emotion:     'var(--accent-pink, #d946ef)',
+  commitment:  'var(--accent-red)',
+  emotion:     'var(--accent-purple-light)',
   general:     'var(--text-secondary)',
 }
 
@@ -41,7 +43,7 @@ function ImportanceDots({ value }: { value: number }) {
             width: 5,
             height: 5,
             borderRadius: '50%',
-            background: i < value ? 'var(--accent-green)' : 'var(--border)',
+            background: i < value ? 'var(--accent-green)' : 'var(--surface-border)',
           }}
         />
       ))}
@@ -80,58 +82,39 @@ export function MemoryPage() {
     <PageTransition>
       <div style={{ maxWidth: 800, margin: '0 auto' }}>
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-6)' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <Brain size={24} color="var(--accent-purple)" />
-            <div>
-              <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, margin: 0 }}>
-                AI Memory
-              </h1>
-              <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)', margin: 0 }}>
-                What the assistant remembers about you
-              </p>
+        <PageHeader
+          eyebrow="Assistant"
+          title="AI Memory"
+          subtitle="What the assistant remembers about you"
+          actions={
+            <div className="stat-strip" style={{ gap: 'var(--space-4)' }}>
+              <Stat label="Total facts" value={totalCount} />
+              <Stat label="Confirmed" value={verifiedCount} color="var(--accent-green)" />
             </div>
-          </div>
-
-          {/* Stats */}
-          <div style={{ display: 'flex', gap: 'var(--space-4)', textAlign: 'right' }}>
-            <div>
-              <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--accent-green)' }}>
-                {totalCount}
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Total facts</div>
-            </div>
-            <div>
-              <div style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, color: 'var(--accent-blue)' }}>
-                {verifiedCount}
-              </div>
-              <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-secondary)' }}>Confirmed</div>
-            </div>
-          </div>
-        </div>
+          }
+        />
 
         {/* Category filter */}
         <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', marginBottom: 'var(--space-5)' }}>
           <Filter size={14} color="var(--text-secondary)" style={{ marginTop: 6 }} />
-          {categories.map(cat => (
-            <button
-              key={cat}
-              onClick={() => setFilterCat(cat)}
-              style={{
-                padding: '4px 12px',
-                borderRadius: 20,
-                border: `1px solid ${filterCat === cat ? CATEGORY_COLORS[cat] ?? 'var(--accent-blue)' : 'var(--border)'}`,
-                background: filterCat === cat ? `${CATEGORY_COLORS[cat] ?? 'var(--accent-blue)'}18` : 'transparent',
-                color: filterCat === cat ? CATEGORY_COLORS[cat] ?? 'var(--accent-blue)' : 'var(--text-secondary)',
-                fontSize: 'var(--text-sm)',
-                cursor: 'pointer',
-                fontWeight: filterCat === cat ? 600 : 400,
-                transition: 'all 0.15s',
-              }}
-            >
-              {cat === ALL ? 'All' : CATEGORY_LABELS[cat] ?? cat}
-            </button>
-          ))}
+          {categories.map(cat => {
+            const active = filterCat === cat
+            const color = CATEGORY_COLORS[cat] ?? 'var(--accent-blue)'
+            return (
+              <button
+                key={cat}
+                onClick={() => setFilterCat(cat)}
+                className={`chip-toggle${active ? ' active' : ''}`}
+                style={active ? {
+                  borderColor: color,
+                  background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                  color,
+                } : undefined}
+              >
+                {cat === ALL ? 'All' : CATEGORY_LABELS[cat] ?? cat}
+              </button>
+            )
+          })}
         </div>
 
         {/* Facts list */}
@@ -144,7 +127,7 @@ export function MemoryPage() {
             color: 'var(--text-secondary)',
             padding: 'var(--space-12)',
             textAlign: 'center',
-            border: '1px dashed var(--border)',
+            border: '1px dashed var(--surface-border)',
             borderRadius: 'var(--radius-lg)',
           }}>
             <Brain size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
@@ -157,8 +140,8 @@ export function MemoryPage() {
                 <div
                   style={{
                     background: 'var(--surface)',
-                    border: `1px solid ${fact.verifiedByUser ? 'var(--accent-green)33' : 'var(--border)'}`,
-                    borderLeft: `3px solid ${CATEGORY_COLORS[fact.category] ?? 'var(--border)'}`,
+                    border: `1px solid ${fact.verifiedByUser ? 'color-mix(in srgb, var(--accent-green) 20%, transparent)' : 'var(--surface-border)'}`,
+                    borderLeft: `3px solid ${CATEGORY_COLORS[fact.category] ?? 'var(--surface-border)'}`,
                     borderRadius: 'var(--radius-md)',
                     padding: 'var(--space-4)',
                     display: 'flex',
@@ -177,7 +160,7 @@ export function MemoryPage() {
                       {CATEGORY_LABELS[fact.category] ?? fact.category}
                     </div>
                     <ImportanceDots value={fact.importance} />
-                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted, var(--text-secondary))', marginTop: 2 }}>
+                    <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginTop: 2 }}>
                       {fact.importance}/10
                     </div>
                   </div>
@@ -210,8 +193,8 @@ export function MemoryPage() {
                               fontSize: 11,
                               padding: '1px 7px',
                               borderRadius: 10,
-                              background: 'var(--surface-2, var(--bg-card))',
-                              border: '1px solid var(--border)',
+                              background: 'var(--surface)',
+                              border: '1px solid var(--surface-border)',
                               color: 'var(--text-secondary)',
                             }}
                           >
@@ -231,7 +214,7 @@ export function MemoryPage() {
                         style={{
                           padding: 6,
                           background: 'transparent',
-                          border: '1px solid var(--border)',
+                          border: '1px solid var(--surface-border)',
                           borderRadius: 'var(--radius-sm)',
                           cursor: 'pointer',
                           color: 'var(--accent-green)',
@@ -248,7 +231,7 @@ export function MemoryPage() {
                       style={{
                         padding: 6,
                         background: 'transparent',
-                        border: '1px solid var(--border)',
+                        border: '1px solid var(--surface-border)',
                         borderRadius: 'var(--radius-sm)',
                         cursor: 'pointer',
                         color: 'var(--text-secondary)',

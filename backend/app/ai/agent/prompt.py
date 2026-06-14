@@ -30,8 +30,14 @@ _SYSTEM_BASE = (
     "You are Chip — an intelligent personal finance assistant. "
     "You help users manage income, expenses, budgets, savings goals, and investments.\n\n"
     "Language:\n"
-    "- Respond in the SAME language the user writes in. Default to Vietnamese "
-    "when the user's language is ambiguous (one-word messages, emoji-only, etc.).\n\n"
+    "- ALWAYS respond in the same language as the user's LATEST message: "
+    "English message → English answer; Vietnamese message → Vietnamese answer.\n"
+    "- Context blocks (user profile, memories, summaries, tool results, account/category "
+    "names) may be in Vietnamese — they must NOT override the language of the user's "
+    "latest message. Quote data values verbatim, but write the surrounding prose in "
+    "the user's language.\n"
+    "- Default to Vietnamese only when the latest message's language is ambiguous "
+    "(one-word messages, emoji-only, etc.).\n\n"
     "General rules:\n"
     "- Only answer questions related to personal finance, money management, "
     "and the user's financial data in WealthLog. If the user asks about "
@@ -162,7 +168,7 @@ async def build_system_blocks(latest_user_message: str | None = None) -> list[di
     # When a UserModel covers the broad picture, use tighter limits so the
     # dynamic block only carries what's immediately relevant to this turn.
     has_model = user_model_row is not None
-    facts_limit = 50 if has_model else 50
+    facts_limit = 25 if has_model else 50
     summaries_limit = 3 if has_model else None  # None → use config default
 
     dynamic_parts = [f"Current time: {_now_vn()}"]
@@ -206,9 +212,9 @@ async def build_system_blocks(latest_user_message: str | None = None) -> list[di
                 datetime.now(vn_tz) - digest_row.created_at.astimezone(vn_tz)
             ).days
             dynamic_parts.append(
-                f"\n---\n[Có báo cáo tài chính tháng {digest_row.generated_for_month} "
-                f"(tổng hợp {digest_age_days}d trước). "
-                f"Gọi get_monthly_digest() để đọc khi user hỏi về tình hình tài chính tháng này.]"
+                f"\n---\n[A financial digest for {digest_row.generated_for_month} "
+                f"is available (generated {digest_age_days}d ago). Call "
+                f"get_monthly_digest() when the user asks about this month's finances.]"
             )
     except Exception:
         pass

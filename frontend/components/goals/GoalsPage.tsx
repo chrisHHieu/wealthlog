@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Plus } from 'lucide-react'
+import { Plus, Target, Trophy } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useToast } from '@/components/ui/toaster'
 import { ConfirmModal } from '@/components/ui/ConfirmModal'
@@ -10,6 +10,7 @@ import { apiDelete, queryKeys } from '@/lib/api'
 import { useGoals } from '@/hooks/useGoals'
 import { Goal } from '@/types'
 import { PageTransition, StaggerItem } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
 
 import { GoalCard } from './components/GoalCard'
 import { CompletedGoalCard } from './components/CompletedGoalCard'
@@ -51,29 +52,27 @@ export function GoalsPage() {
   return (
     <PageTransition>
       <div>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          marginBottom: 'var(--space-6)',
-        }}>
-          <div>
-            <h1 style={{ fontSize: 'var(--text-2xl)', fontWeight: 700, marginBottom: 'var(--space-1)' }}>
-              Financial goals
-            </h1>
-            <p style={{ fontSize: 'var(--text-sm)', color: 'var(--text-secondary)' }}>
-              {activeGoals.length} active goals
+        <PageHeader
+          eyebrow="Targets"
+          title="Goals"
+          subtitle={
+            <>
+              {activeGoals.length} active {activeGoals.length === 1 ? 'goal' : 'goals'}
               {totalTarget > 0 && ` · Total ${formatVNDCompact(totalSaved)} / ${formatVNDCompact(totalTarget)}`}
-            </p>
-          </div>
-          <button id="add-goal-btn" onClick={openAdd} className="btn btn-primary">
-            <Plus size={15} /> Create goal
-          </button>
-        </div>
+            </>
+          }
+          actions={
+            <button id="add-goal-btn" onClick={openAdd} className="btn btn-primary">
+              <Plus size={15} /> Create goal
+            </button>
+          }
+        />
 
         {activeGoals.length === 0 ? (
           <div className="empty-state card" style={{ padding: 'var(--space-16) var(--space-6)' }}>
-            <span style={{ fontSize: 56 }}>🎯</span>
+            <div className="icon-tile" style={{ width: 56, height: 56 }}>
+              <Target size={26} />
+            </div>
             <p style={{ fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--text-primary)' }}>No goals yet</p>
             <p style={{ fontSize: 'var(--text-sm)' }}>Create financial goals to save with purpose</p>
             <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 'var(--space-3)' }}>
@@ -86,11 +85,10 @@ export function GoalsPage() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
             gap: 'var(--space-4)',
           }}>
-            {activeGoals.map((goal, i) => (
+            {activeGoals.map((goal) => (
               <StaggerItem key={goal.id}>
                 <GoalCard
                   goal={goal}
-                  index={i}
                   onContribute={setShowContribute}
                   onEdit={openEdit}
                   onDelete={setDeleteId}
@@ -102,15 +100,8 @@ export function GoalsPage() {
 
         {completedGoals.length > 0 && (
           <div style={{ marginTop: 'var(--space-8)' }}>
-            <div style={{
-              fontSize: 'var(--text-xs)',
-              fontWeight: 700,
-              color: 'var(--text-tertiary)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.06em',
-              marginBottom: 'var(--space-3)',
-            }}>
-              🏆 Completed ({completedGoals.length})
+            <div className="stat-label" style={{ marginBottom: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <Trophy size={12} /> Completed ({completedGoals.length})
             </div>
             <div style={{
               display: 'grid',

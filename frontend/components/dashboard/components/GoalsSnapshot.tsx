@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Plus } from 'lucide-react'
+import { Plus, Target } from 'lucide-react'
 import Link from 'next/link'
 import { formatVNDCompact } from '@/lib/utils'
 import { Goal } from '@/types'
@@ -13,7 +13,7 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
   return (
     <div className="card" style={{ padding: 'var(--space-5)', height: '100%', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 'var(--space-4)' }}>
-        <div style={{ fontWeight: 700, fontSize: 'var(--text-base)' }}>Financial goals</div>
+        <div className="card-title">Financial goals</div>
         <Link href="/goals" className="btn btn-ghost btn-sm" style={{ padding: 'var(--space-1)' }}>
           <Plus size={16} />
         </Link>
@@ -25,7 +25,9 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
         </div>
       ) : goals.length === 0 ? (
         <div className="empty-state" style={{ flex: 1, padding: 'var(--space-6) var(--space-3)' }}>
-          <span style={{ fontSize: 32 }}>🎯</span>
+          <div className="icon-tile" style={{ width: 48, height: 48 }}>
+            <Target size={22} />
+          </div>
           <span style={{ fontSize: 'var(--text-sm)', marginTop: 'var(--space-1)', color: 'var(--text-tertiary)' }}>No goals yet</span>
           <Link href="/goals" className="btn btn-primary btn-sm" style={{ marginTop: 'var(--space-2)' }}>
             Create your first goal
@@ -50,7 +52,7 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
                       {goal.name}
                     </span>
                   </div>
-                  <span style={{
+                  <span className="num-meta" style={{
                     fontSize: 'var(--text-sm)',
                     fontWeight: 700,
                     color: goal.color,
@@ -60,8 +62,8 @@ export function GoalsSnapshot({ goals, isLoading }: GoalsSnapshotProps) {
                     {pct.toFixed(0)}%
                   </span>
                 </div>
-                <div style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1-5)' }}>
-                  Reached {formatVNDCompact(goal.currentAmount)} / {formatVNDCompact(goal.targetAmount)}
+                <div className="num-meta" style={{ fontSize: 'var(--text-xs)', color: 'var(--text-tertiary)', marginBottom: 'var(--space-1-5)' }}>
+                  {formatVNDCompact(goal.currentAmount)} / {formatVNDCompact(goal.targetAmount)}
                 </div>
                 <div className="progress-bar">
                   <motion.div

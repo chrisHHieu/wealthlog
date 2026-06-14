@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, Info, TrendingDown, TrendingUp } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
 import { formatVNDCompact } from '@/lib/utils'
 import { ReportAnalysis } from '../reportAnalysis'
 import { ReportMode } from '@/hooks/useReports'
@@ -15,55 +15,19 @@ const toneStyles = {
   neutral: { color: 'var(--accent-blue)', icon: Info },
 }
 
-function DeltaLine({ label, value, positiveWhenUp = true }: { label: string; value: number; positiveWhenUp?: boolean }) {
-  const isPositive = positiveWhenUp ? value >= 0 : value <= 0
-  const Icon = value >= 0 ? TrendingUp : TrendingDown
+function AverageLine({ label, value }: { label: string; value: string }) {
   return (
-    <div className="delta-line">
-      <span>{label}</span>
-      <span style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'flex-end',
-        gap: 4,
-        fontSize: 12,
-        fontWeight: 700,
-        color: isPositive ? 'var(--accent-green)' : 'var(--accent-red)',
-        minWidth: 0,
-      }}>
-        <Icon size={13} />
-        {value >= 0 ? '+' : ''}{value.toFixed(1)}%
-      </span>
-      <style jsx>{`
-        .delta-line {
-          display: grid;
-          grid-template-columns: minmax(0, 1fr) max-content;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 0;
-          border-bottom: 1px solid var(--surface-border);
-          min-width: 0;
-        }
-
-        .delta-line span:first-child {
-          color: var(--text-secondary);
-          font-size: 12px;
-          overflow: hidden;
-          text-overflow: ellipsis;
-          white-space: nowrap;
-        }
-
-        @media (max-width: 640px) {
-          .delta-line {
-            grid-template-columns: 1fr;
-            gap: 3px;
-          }
-
-          .delta-line span:last-child {
-            justify-content: flex-start !important;
-          }
-        }
-      `}</style>
+    <div style={{
+      display: 'flex',
+      alignItems: 'baseline',
+      justifyContent: 'space-between',
+      gap: 10,
+      padding: '8px 0',
+      borderBottom: '1px solid var(--surface-border)',
+      minWidth: 0,
+    }}>
+      <span style={{ color: 'var(--text-secondary)', fontSize: 12, whiteSpace: 'nowrap' }}>{label}</span>
+      <span className="num-meta" style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-primary)' }}>{value}</span>
     </div>
   )
 }
@@ -76,10 +40,10 @@ export function ExecutiveSummary({ analysis, mode, periodLabel }: ExecutiveSumma
   return (
     <div className="executive-summary-grid">
       <section className="card" style={{ padding: 22 }}>
-        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: 0.4, marginBottom: 8 }}>
-          {mode === 'month' ? 'Monthly summary' : 'Yearly summary'} - {periodLabel}
+        <div className="stat-label" style={{ marginBottom: 8 }}>
+          {mode === 'month' ? 'Monthly summary' : 'Yearly summary'} · {periodLabel}
         </div>
-        <h2 style={{ fontSize: 20, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 8 }}>
+        <h2 className="font-display" style={{ fontSize: 'clamp(22px, 1vw + 18px, 28px)', fontWeight: 500, letterSpacing: '-0.02em', lineHeight: 1.12, color: 'var(--text-primary)', marginBottom: 10 }}>
           {analysis.insights[0]?.title ?? 'Financial snapshot'}
         </h2>
         <p style={{ fontSize: 13, lineHeight: 1.7, color: 'var(--text-secondary)', maxWidth: 780, marginBottom: 18 }}>
@@ -92,8 +56,8 @@ export function ExecutiveSummary({ analysis, mode, periodLabel }: ExecutiveSumma
             const Icon = style.icon
             return (
               <div key={insight.title} style={{
-                border: `1px solid ${style.color}30`,
-                background: `${style.color}10`,
+                border: `1px solid color-mix(in srgb, ${style.color} 15%, transparent)`,
+                background: `color-mix(in srgb, ${style.color} 6%, transparent)`,
                 borderRadius: 8,
                 padding: 12,
                 minHeight: 92,
@@ -108,18 +72,29 @@ export function ExecutiveSummary({ analysis, mode, periodLabel }: ExecutiveSumma
       </section>
 
       <aside className="card" style={{ padding: 20 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 10 }}>Period movement</div>
-        <DeltaLine label="Income" value={analysis.incomeDeltaPct} />
-        <DeltaLine label="Expenses" value={analysis.expenseDeltaPct} positiveWhenUp={false} />
-        <DeltaLine label="Net savings" value={analysis.savingsDeltaPct} />
+        <div className="card-title" style={{ marginBottom: 10 }}>Period at a glance</div>
+        <AverageLine
+          label={mode === 'month' ? 'Avg spend / day' : 'Avg spend / month'}
+          value={formatVNDCompact(analysis.avgExpensePerPoint)}
+        />
+        <AverageLine
+          label={mode === 'month' ? 'Days with spending' : 'Months with spending'}
+          value={`${analysis.activeSpendingPoints} / ${analysis.totalPoints}`}
+        />
+        {analysis.bestPoint && (
+          <AverageLine
+            label={mode === 'month' ? 'Best day (net)' : 'Best month (net)'}
+            value={`${mode === 'month' ? 'Day ' : ''}${analysis.bestPoint.label} · ${formatVNDCompact(analysis.bestPoint.income - analysis.bestPoint.expense)}`}
+          />
+        )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 14 }}>
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>Fixed costs</div>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{formatVNDCompact(analysis.fixedExpense)}</div>
+            <div className="num-meta" style={{ fontSize: 15, fontWeight: 800 }}>{formatVNDCompact(analysis.fixedExpense)}</div>
           </div>
           <div>
             <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 4 }}>Variable costs</div>
-            <div style={{ fontSize: 15, fontWeight: 800 }}>{formatVNDCompact(analysis.variableExpense)}</div>
+            <div className="num-meta" style={{ fontSize: 15, fontWeight: 800 }}>{formatVNDCompact(analysis.variableExpense)}</div>
           </div>
         </div>
       </aside>

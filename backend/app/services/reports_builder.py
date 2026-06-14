@@ -97,7 +97,7 @@ async def build_reports(
             "amount": t.amount,
             "date": t.date,
             "description": t.description,
-            "categoryName": t.category_name or "Khác",
+            "categoryName": t.category_name or "Other",
             "categoryIcon": t.category_icon or "📦",
             "categoryColor": t.category_color or "#6b7280",
         }
@@ -179,7 +179,7 @@ def _cat_map(txs, tx_type: str) -> dict[str, dict]:
         key = str(t.category_id) if t.category_id else "other"
         if key not in result:
             result[key] = {
-                "name": t.category_name or "Khác",
+                "name": t.category_name or "Other",
                 "icon": t.category_icon or "📦",
                 "color": t.category_color or "#6b7280",
                 "total": 0,

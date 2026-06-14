@@ -2,15 +2,17 @@
 
 import { useState } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Portal } from '@/components/ui/Portal'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, Edit2, Trash2, Archive, History, RefreshCw } from 'lucide-react'
+import { Plus, Edit2, Trash2, Archive, RefreshCw, Wallet, X } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { formatVND, formatVNDCompact, parseShorthandAmount, formatAmountLive } from '@/lib/utils'
 import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import { AnimatedCounter } from '@/components/ui/AnimatedCounter'
 import { Select } from '@/components/ui/Select'
+import { Stat } from '@/components/ui/Stat'
 import { BankLogo } from '@/components/ui/BankLogo'
 import { useRouter } from 'next/navigation'
 
@@ -171,40 +173,42 @@ export function AccountsPage() {
   return (
     <PageTransition>
     <div>
-      <div className="accounts-toolbar">
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Accounts</h1>
-          <p style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{activeAccounts.length} active accounts</p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={navigateTransfer} className="btn btn-secondary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <RefreshCw size={15} /> Transfer money
-          </button>
-          <button id="add-account-btn" onClick={openAdd} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Plus size={15} /> Add account
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Balances"
+        title="Accounts"
+        subtitle={`${activeAccounts.length} active ${activeAccounts.length === 1 ? 'account' : 'accounts'}`}
+        actions={
+          <>
+            <button onClick={navigateTransfer} className="btn btn-secondary">
+              <RefreshCw size={15} /> Transfer money
+            </button>
+            <button id="add-account-btn" onClick={openAdd} className="btn btn-primary">
+              <Plus size={15} /> Add account
+            </button>
+          </>
+        }
+      />
 
       {/* Summary */}
-      <div className="accounts-summary-grid">
-        <div className="card" style={{ padding: '20px', background: 'linear-gradient(135deg, rgba(0,200,150,0.08), transparent)', borderColor: 'rgba(0,200,150,0.2)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total assets</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-green)' }}>
-            <AnimatedCounter value={totalAssets} format={v => formatVNDCompact(Math.round(v))} />
-          </div>
-        </div>
-        <div className="card" style={{ padding: '20px', background: 'linear-gradient(135deg, rgba(255,77,109,0.08), transparent)', borderColor: 'rgba(255,77,109,0.2)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total debt</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-red)' }}>
-            <AnimatedCounter value={totalDebt} format={v => formatVNDCompact(Math.round(v))} />
-          </div>
-        </div>
-        <div className="card" style={{ padding: '20px', background: 'linear-gradient(135deg, rgba(61,142,248,0.08), transparent)', borderColor: 'rgba(61,142,248,0.2)' }}>
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Net worth</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-blue)' }}>
-            <AnimatedCounter value={netWorth} format={v => formatVNDCompact(Math.round(v))} />
-          </div>
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div className="stat-strip">
+          <Stat
+            label="Total assets"
+            value={<AnimatedCounter value={totalAssets} format={v => formatVNDCompact(Math.round(v))} />}
+            color="var(--accent-green)"
+            size="lg"
+          />
+          <Stat
+            label="Total debt"
+            value={<AnimatedCounter value={totalDebt} format={v => formatVNDCompact(Math.round(v))} />}
+            color="var(--accent-red)"
+            size="lg"
+          />
+          <Stat
+            label="Net worth"
+            value={<AnimatedCounter value={netWorth} format={v => formatVNDCompact(Math.round(v))} />}
+            size="lg"
+          />
         </div>
       </div>
 
@@ -217,7 +221,9 @@ export function AccountsPage() {
         </div>
       ) : activeAccounts.length === 0 ? (
         <div className="empty-state card" style={{ padding: '48px 24px' }}>
-          <span style={{ fontSize: 48 }}>💳</span>
+          <div className="icon-tile" style={{ width: 56, height: 56 }}>
+            <Wallet size={26} />
+          </div>
           <p style={{ fontSize: 15, fontWeight: 600 }}>No accounts yet</p>
           <button className="btn btn-primary" onClick={openAdd} style={{ marginTop: 8 }}>
             <Plus size={15} /> Add your first account
@@ -230,7 +236,7 @@ export function AccountsPage() {
             if (groupAccounts.length === 0) return null
             return (
               <div key={group.key}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+                <div className="stat-label" style={{ marginBottom: 10 }}>
                   {group.label}
                 </div>
                 <div className="accounts-card-grid compact">
@@ -238,9 +244,8 @@ export function AccountsPage() {
                     <motion.div
                       key={acc.id}
                       onClick={() => handleCardClick(acc.id)}
-                      className="card"
+                      className="card card-interactive"
                       style={{ padding: '20px', cursor: 'pointer', borderLeft: `3px solid ${acc.color}` }}
-                      whileHover={{ scale: 1.01, boxShadow: `0 4px 24px ${acc.color}20, var(--shadow-card)` }}
                       initial={{ opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
                     >
@@ -254,7 +259,7 @@ export function AccountsPage() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ fontSize: 20, fontWeight: 700, color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--accent-red)' }}>
+                        <div className="num-meta" style={{ fontSize: 20, fontWeight: 700, color: acc.balance >= 0 ? 'var(--text-primary)' : 'var(--accent-red)' }}>
                           {formatVND(acc.balance)}
                         </div>
                         <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
@@ -314,7 +319,9 @@ export function AccountsPage() {
             <motion.div className="drawer" style={{ height: '100dvh', display: 'flex', flexDirection: 'column' }} initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', stiffness: 300, damping: 30 }}>
               <div style={{ padding: '20px 24px', borderBottom: '1px solid var(--surface-border)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                 <h2 style={{ fontSize: 17, fontWeight: 600 }}>{editAccount ? 'Edit account' : 'Add account'}</h2>
-                <button onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }}>✕</button>
+                <button onClick={() => setShowForm(false)} className="btn btn-ghost" style={{ width: 32, height: 32, padding: 0, borderRadius: '50%' }} aria-label="Close">
+                  <X size={16} />
+                </button>
               </div>
 
               <div style={{ padding: '20px 24px', display: 'flex', flexDirection: 'column', gap: 16, overflowY: 'auto', flex: 1 }}>
@@ -443,28 +450,6 @@ export function AccountsPage() {
       </AnimatePresence>
       </Portal>
       <style jsx>{`
-        .accounts-toolbar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: var(--space-4);
-          margin-bottom: 24px;
-        }
-
-        .accounts-toolbar > div:last-child {
-          display: flex;
-          gap: 8px;
-          flex-wrap: wrap;
-          justify-content: flex-end;
-        }
-
-        .accounts-summary-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
         .accounts-card-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(min(280px, 100%), 1fr));
@@ -473,22 +458,6 @@ export function AccountsPage() {
 
         .accounts-card-grid.compact {
           gap: 12px;
-        }
-
-        @media (max-width: 720px) {
-          .accounts-toolbar {
-            align-items: stretch;
-            flex-direction: column;
-          }
-
-          .accounts-toolbar > div:last-child {
-            justify-content: stretch;
-          }
-
-          .accounts-toolbar > div:last-child :global(.btn) {
-            flex: 1;
-            justify-content: center;
-          }
         }
       `}</style>
     </div>

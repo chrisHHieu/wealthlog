@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+﻿import { useState, useRef, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronDown, Check } from 'lucide-react'
 
@@ -82,7 +82,7 @@ export function Select({ value, onChange, options, placeholder = 'Select...', wi
               background: 'var(--bg-secondary)',
               border: '1px solid var(--surface-border)',
               borderRadius: 10,
-              boxShadow: 'var(--shadow-dropdown)',
+              boxShadow: 'var(--elevation-3)',
               zIndex: 50,
               maxHeight: 280,
               overflowY: 'auto',

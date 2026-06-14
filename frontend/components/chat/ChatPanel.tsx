@@ -9,6 +9,7 @@ import { useRef, useEffect, useState } from 'react'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/useAppStore'
+import { timeAgo } from '@/lib/utils'
 import { ChatMessage } from './ChatMessage'
 import { ChatInput } from './ChatInput'
 import { useChat, useSessions, useModel } from '@/hooks/useChatState'
@@ -25,7 +26,7 @@ export function ChatPanel() {
   const router = useRouter()
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const { models, selectedModel, selectModel } = useModel()
-  const { messages, isStreaming, sessionId, sendMessage, newSession, loadSession } = useChat(selectedModel)
+  const { messages, isStreaming, sessionId, sendMessage, stopStreaming, retryLast, newSession, loadSession } = useChat(selectedModel)
   const { sessions, deleteSession } = useSessions(sessionId)
   const [showHistory, setShowHistory] = useState(false)
   const [showModelPicker, setShowModelPicker] = useState(false)
@@ -165,7 +166,7 @@ export function ChatPanel() {
                     >
                       <div className="chat-session-info">
                         <span className="chat-session-title">{s.title}</span>
-                        <span className="chat-session-meta">{s.messageCount} messages</span>
+                        <span className="chat-session-meta">{timeAgo(s.updatedAt)} · {s.messageCount} {s.messageCount === 1 ? 'message' : 'messages'}</span>
                       </div>
                       <button
                         className="chat-session-delete"
@@ -199,7 +200,7 @@ export function ChatPanel() {
                     </div>
                   </div>
                 )}
-                {messages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
+                {messages.map(msg => <ChatMessage key={msg.id} message={msg} onRetry={retryLast} />)}
                 <div ref={messagesEndRef} />
               </div>
               <div style={{ position: 'relative', height: 0, zIndex: 50, display: 'flex', justifyContent: 'center' }}>
@@ -224,10 +225,14 @@ export function ChatPanel() {
                   )}
                 </AnimatePresence>
               </div>
-              <ChatInput onSend={(msg) => {
-                scrollToBottomSmooth()
-                sendMessage(msg)
-              }} disabled={isStreaming} />
+              <ChatInput
+                onSend={(msg) => {
+                  scrollToBottomSmooth()
+                  sendMessage(msg)
+                }}
+                onStop={stopStreaming}
+                streaming={isStreaming}
+              />
             </>
           )}
         </motion.div>

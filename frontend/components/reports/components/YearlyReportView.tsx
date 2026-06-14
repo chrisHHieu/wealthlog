@@ -3,6 +3,7 @@ import { ReportsData } from '@/types'
 import { ReportAnalysis } from '../reportAnalysis'
 import { CashFlowStatement } from './CashFlowStatement'
 import { IncomeExpenseChart } from './IncomeExpenseChart'
+import { MonthlyBreakdownTable } from './MonthlyBreakdownTable'
 import { PeriodComparison } from './PeriodComparison'
 import { ReportActionItems } from './ReportActionItems'
 import { ReportHighlights, YearlyHealthStrip } from './ReportHighlights'
@@ -29,6 +30,10 @@ export function YearlyReportView({ data, analysis, isLoading }: YearlyReportView
 
       <ReportHighlights analysis={analysis} mode="year" />
 
+      <ScrollReveal>
+        <MonthlyBreakdownTable chartData={data.chartData} isLoading={isLoading} />
+      </ScrollReveal>
+
       <ScrollReveal delay={0.05}>
         <PeriodComparison
           expenseByCategory={data.expenseByCategory}
@@ -44,7 +49,7 @@ export function YearlyReportView({ data, analysis, isLoading }: YearlyReportView
         </div>
       </ScrollReveal>
 
-      <ReportActionItems analysis={analysis} />
+      <ReportActionItems analysis={analysis} current={data.current} mode="year" />
 
       <style jsx>{`
         .reports-chart-grid {

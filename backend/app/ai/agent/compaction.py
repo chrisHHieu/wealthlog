@@ -49,12 +49,17 @@ def _split_turns(messages: list[dict]) -> list[list[dict]]:
     return turns
 
 
+# Reserve for the truncation note appended below — keeps total output within
+# max_chars. Update if the note text grows.
+_TRUNCATION_NOTE_RESERVE = 130
+
+
 def _truncate_tool_result(text: str, max_chars: int) -> str:
     """Truncate a tool result that exceeds max_chars, preserving useful context."""
     if len(text) <= max_chars:
         return text
 
-    cut = max_chars - 80
+    cut = max(0, max_chars - _TRUNCATION_NOTE_RESERVE)
     truncated = text[:cut]
 
     last_newline = truncated.rfind("\n")
@@ -64,7 +69,8 @@ def _truncate_tool_result(text: str, max_chars: int) -> str:
     remaining = len(text) - len(truncated)
     return (
         f"{truncated}\n\n"
-        f"[... {remaining:,} chars truncated. Re-call with a smaller limit for details.]"
+        f"[... {remaining:,} chars truncated — page with offset or narrow the "
+        f"query; a smaller limit alone returns the same head again.]"
     )
 
 

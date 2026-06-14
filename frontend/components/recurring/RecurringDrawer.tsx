@@ -268,7 +268,7 @@ export function RecurringDrawer({ item, onClose, onSaved }: RecurringDrawerProps
           <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px' }}>
             {/* Amount */}
             <div style={{ textAlign: 'center', marginBottom: 28 }}>
-              <div style={{ fontSize: 11, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8 }}>
+              <div className="stat-label" style={{ marginBottom: 8 }}>
                 Amount
               </div>
               <AmountInput

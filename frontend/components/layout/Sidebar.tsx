@@ -23,15 +23,15 @@ import { cn } from '@/lib/utils'
 import { useAppStore } from '@/store/useAppStore'
 
 const NAV_ITEMS = [
-  { href: '/', icon: LayoutDashboard, label: 'Dashboard', color: 'var(--accent-green)' },
-  { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions', color: 'var(--accent-blue)' },
-  { href: '/accounts', icon: Wallet, label: 'Accounts', color: 'var(--accent-gold)' },
-  { href: '/budget', icon: PiggyBank, label: 'Budget', color: 'var(--accent-amber)' },
-  { href: '/recurring', icon: Repeat, label: 'Recurring', color: 'var(--accent-purple)' },
-  { href: '/goals', icon: Target, label: 'Goals', color: 'var(--accent-green)' },
-  { href: '/investments', icon: TrendingUp, label: 'Investments', color: 'var(--accent-gold)' },
-  { href: '/reports', icon: BarChart2, label: 'Reports', color: 'var(--accent-blue)' },
-  { href: '/chat', icon: Sparkles, label: 'Chip Assistant', color: 'var(--accent-purple)' },
+  { href: '/', icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/transactions', icon: ArrowLeftRight, label: 'Transactions' },
+  { href: '/accounts', icon: Wallet, label: 'Accounts' },
+  { href: '/budget', icon: PiggyBank, label: 'Budget' },
+  { href: '/recurring', icon: Repeat, label: 'Recurring' },
+  { href: '/goals', icon: Target, label: 'Goals' },
+  { href: '/investments', icon: TrendingUp, label: 'Investments' },
+  { href: '/reports', icon: BarChart2, label: 'Reports' },
+  { href: '/chat', icon: Sparkles, label: 'Chip Assistant' },
 ]
 
 export function Sidebar() {
@@ -97,10 +97,7 @@ export function Sidebar() {
                       transition={{ type: 'spring', stiffness: 350, damping: 30 }}
                     />
                   )}
-                  <div
-                    className="sidebar-icon"
-                    style={isActive ? { background: `${item.color}12`, color: item.color } : undefined}
-                  >
+                  <div className="sidebar-icon">
                     <item.icon size={18} />
                   </div>
                   <AnimatePresence>

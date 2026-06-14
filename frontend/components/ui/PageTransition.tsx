@@ -8,25 +8,29 @@ interface PageTransitionProps {
   className?: string
 }
 
+// Spring-based motion: content settles in with natural weight instead of a flat ease
 const pageVariants = {
-  hidden: { opacity: 0, y: 16 },
+  hidden: { opacity: 0, y: 12 },
   visible: {
     opacity: 1,
     y: 0,
     transition: {
-      duration: 0.4,
-      ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
+      type: 'spring' as const,
+      stiffness: 260,
+      damping: 30,
+      mass: 0.9,
       staggerChildren: 0.06,
+      delayChildren: 0.03,
     },
   },
 }
 
 const itemVariants = {
-  hidden: { opacity: 0, y: 12 },
+  hidden: { opacity: 0, y: 14 },
   visible: {
     opacity: 1,
     y: 0,
-    transition: { duration: 0.35, ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number] },
+    transition: { type: 'spring' as const, stiffness: 300, damping: 32, mass: 0.8 },
   },
 }
 

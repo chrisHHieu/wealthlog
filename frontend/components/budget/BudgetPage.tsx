@@ -2,10 +2,11 @@
 
 import { useState } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Portal } from '@/components/ui/Portal'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { Plus, ChevronLeft, ChevronRight, Target, Trash2, Edit2 } from 'lucide-react'
+import { Plus, ChevronLeft, ChevronRight, Clock, PiggyBank, Trash2 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { formatVND, formatVNDCompact, formatMonthVI, getCurrentMonth, getDaysRemaining, parseShorthandAmount, formatAmountLive } from '@/lib/utils'
 import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
@@ -13,6 +14,8 @@ import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts'
 import { Select } from '@/components/ui/Select'
+import { Stat } from '@/components/ui/Stat'
+import { AXIS_STYLE, GRID_STYLE, ChartTooltip } from '@/lib/chartTheme'
 
 interface BudgetItem {
   id: string
@@ -54,9 +57,8 @@ function nextMonth(yyyymm: string) {
 }
 
 function progressColor(pct: number) {
-  if (pct >= 100) return 'var(--accent-red)'
-  if (pct >= 90) return '#f97316'
-  if (pct >= 70) return 'var(--accent-yellow)'
+  if (pct >= 90) return 'var(--accent-red)'
+  if (pct >= 70) return 'var(--accent-gold)'
   return 'var(--accent-green)'
 }
 
@@ -143,71 +145,84 @@ export function BudgetPage() {
     <PageTransition>
     <div>
       {/* Header */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 }}>
-        <div>
-          <h1 style={{ fontSize: 22, fontWeight: 700, marginBottom: 4 }}>Budget</h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, fontSize: 13, color: 'var(--text-secondary)' }}>
+      <PageHeader
+        eyebrow="Monthly plan"
+        title="Budget"
+        subtitle={
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <button onClick={() => setMonth(prevMonth(month))} className="btn btn-ghost btn-sm" style={{ padding: '2px 6px' }}>
               <ChevronLeft size={16} />
             </button>
             <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{formatMonthVI(month)}</span>
-            <button 
-              onClick={() => month >= getCurrentMonth() ? null : setMonth(nextMonth(month))} 
-              className="btn btn-ghost btn-sm" 
+            <button
+              onClick={() => month >= getCurrentMonth() ? null : setMonth(nextMonth(month))}
+              className="btn btn-ghost btn-sm"
               style={{ padding: '2px 6px', opacity: month >= getCurrentMonth() ? 0.3 : 1 }}
               disabled={month >= getCurrentMonth()}
             >
               <ChevronRight size={16} />
             </button>
             {isCurrentMonth && (
-              <span style={{ fontSize: 12, color: 'var(--accent-yellow)' }}>🕒 Left {daysLeft} days</span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--accent-gold)' }}>
+                <Clock size={12} /> {daysLeft} days left
+              </span>
             )}
           </div>
-        </div>
-        <button id="add-budget-btn" onClick={() => setShowForm(true)} className="btn btn-primary" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <Plus size={15} /> Set budget
-        </button>
-      </div>
+        }
+        actions={
+          <button id="add-budget-btn" onClick={() => setShowForm(true)} className="btn btn-primary">
+            <Plus size={15} /> Set budget
+          </button>
+        }
+      />
 
       {/* Summary */}
-      <div className="budget-summary-grid">
-        <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Total budget</div>
-          <div style={{ fontSize: 22, fontWeight: 700 }}>{formatVNDCompact(totalBudget)}</div>
-        </div>
-        <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Spent</div>
-          <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--accent-red)' }}>{formatVNDCompact(totalSpent)}</div>
-        </div>
-        <div className="kpi-card">
-          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 8 }}>Remaining</div>
-          <div style={{
-            fontSize: 22, fontWeight: 700,
-            color: totalBudget - totalSpent >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'
-          }}>
-            {formatVNDCompact(totalBudget - totalSpent)}
-          </div>
+      <div className="card" style={{ padding: 20, marginBottom: 24 }}>
+        <div className="stat-strip">
+          <Stat label="Total budget" value={formatVNDCompact(totalBudget)} size="lg" />
+          <Stat label="Spent" value={formatVNDCompact(totalSpent)} color="var(--accent-red)" size="lg" />
+          <Stat
+            label="Remaining"
+            value={formatVNDCompact(totalBudget - totalSpent)}
+            color={totalBudget - totalSpent >= 0 ? 'var(--accent-green)' : 'var(--accent-red)'}
+            size="lg"
+          />
         </div>
       </div>
 
       {/* Budget Alerts */}
       {(() => {
-        const exceeded = budgetsWithSpent.filter(b => b.spent > b.amount)
-        const nearLimit = budgetsWithSpent.filter(b => {
-          const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0
-          return pct >= 80 && pct < 100
-        })
-        if (exceeded.length === 0 && nearLimit.length === 0) return null
+        const alerts = budgetsWithSpent
+          .map(b => {
+            const pct = b.amount > 0 ? Math.round((b.spent / b.amount) * 100) : 0
+            if (b.spent > b.amount) {
+              return {
+                budget: b, pct, color: 'var(--accent-red)',
+                title: `Budget exceeded — ${b.categoryName}`,
+                detail: `Spent ${formatVND(b.spent)} / ${formatVND(b.amount)} — over ${formatVND(b.spent - b.amount)}`,
+              }
+            }
+            if (pct >= 80) {
+              return {
+                budget: b, pct, color: 'var(--accent-gold)',
+                title: `Budget almost used — ${b.categoryName}`,
+                detail: `Left ${formatVND(b.amount - b.spent)} — spent ${pct}%`,
+              }
+            }
+            return null
+          })
+          .filter((a): a is NonNullable<typeof a> => a !== null)
+        if (alerts.length === 0) return null
         return (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-            {exceeded.map(b => (
+            {alerts.map(({ budget: b, pct, color, title, detail }) => (
               <motion.div
                 key={`alert-${b.id}`}
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
                 style={{
-                  background: 'rgba(255, 77, 109, 0.08)',
-                  border: '1px solid rgba(255, 77, 109, 0.3)',
+                  background: `color-mix(in srgb, ${color} 6%, transparent)`,
+                  border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
                   borderRadius: 12,
                   padding: '14px 18px',
                   display: 'flex',
@@ -217,70 +232,25 @@ export function BudgetPage() {
               >
                 <div style={{
                   width: 36, height: 36, borderRadius: 10,
-                  background: 'rgba(255, 77, 109, 0.15)',
+                  background: `color-mix(in srgb, ${color} 12%, transparent)`,
                   display: 'flex', alignItems: 'center', justifyContent: 'center',
                   fontSize: 18, flexShrink: 0,
                 }}>
                   {b.categoryIcon}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--accent-red)', marginBottom: 2 }}>
-                    🚨 Budget exceeded {b.categoryName}!
+                  <div style={{ fontSize: 13, fontWeight: 600, color, marginBottom: 2 }}>
+                    {title}
                   </div>
                   <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                    Spent {formatVND(b.spent)} / {formatVND(b.amount)} — over {formatVND(b.spent - b.amount)}
+                    {detail}
                   </div>
                 </div>
-                <div style={{
-                  fontSize: 20, fontWeight: 800, color: 'var(--accent-red)',
-                  fontVariantNumeric: 'tabular-nums',
-                }}>
-                  {b.amount > 0 ? Math.round((b.spent / b.amount) * 100) : 0}%
+                <div style={{ fontSize: 20, fontWeight: 800, color }}>
+                  {pct}%
                 </div>
               </motion.div>
             ))}
-            {nearLimit.map(b => {
-              const pct = b.amount > 0 ? Math.round((b.spent / b.amount) * 100) : 0
-              return (
-                <motion.div
-                  key={`warn-${b.id}`}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  style={{
-                    background: 'rgba(249, 115, 22, 0.08)',
-                    border: '1px solid rgba(249, 115, 22, 0.25)',
-                    borderRadius: 12,
-                    padding: '14px 18px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12,
-                  }}
-                >
-                  <div style={{
-                    width: 36, height: 36, borderRadius: 10,
-                    background: 'rgba(249, 115, 22, 0.15)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    fontSize: 18, flexShrink: 0,
-                  }}>
-                    {b.categoryIcon}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontSize: 13, fontWeight: 600, color: '#f97316', marginBottom: 2 }}>
-                      ⚡ Budget almost used {b.categoryName}
-                    </div>
-                    <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                      Left {formatVND(b.amount - b.spent)} - spent {pct}%
-                    </div>
-                  </div>
-                  <div style={{
-                    fontSize: 20, fontWeight: 800, color: '#f97316',
-                    fontVariantNumeric: 'tabular-nums',
-                  }}>
-                    {pct}%
-                  </div>
-                </motion.div>
-              )
-            })}
           </div>
         )
       })()}
@@ -288,7 +258,9 @@ export function BudgetPage() {
       {/* Budget list */}
       {budgetsWithSpent.length === 0 ? (
         <div className="empty-state card" style={{ padding: '48px 24px' }}>
-          <span style={{ fontSize: 48 }}>📊</span>
+          <div className="icon-tile" style={{ width: 56, height: 56 }}>
+            <PiggyBank size={26} />
+          </div>
           <p style={{ fontSize: 15, fontWeight: 600 }}>No budgets yet</p>
           <p style={{ fontSize: 13 }}>Set budgets to track spending</p>
           <button className="btn btn-primary" onClick={() => setShowForm(true)} style={{ marginTop: 8 }}>
@@ -299,7 +271,7 @@ export function BudgetPage() {
         <div className="budget-content-grid">
           {/* Budget List */}
           <div className="card" style={{ padding: '20px' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Expense details by category</div>
+            <div className="card-title" style={{ marginBottom: 16 }}>Expense details by category</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               {budgetsWithSpent.map(b => {
                 const pct = b.amount > 0 ? (b.spent / b.amount) * 100 : 0
@@ -321,8 +293,7 @@ export function BudgetPage() {
                           <span style={{ fontSize: 13, fontWeight: 500 }}>{b.categoryName}</span>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                             <span style={{ fontSize: 12, fontWeight: 600, color }}>
-                              {pct.toFixed(0)}%
-                              {isOver && ' 🔴'}
+                              {pct.toFixed(0)}%{isOver ? ' over' : ''}
                             </span>
                             <button
                               onClick={() => handleDelete(b.id)}
@@ -340,12 +311,7 @@ export function BudgetPage() {
                         <div className="progress-bar">
                           <motion.div
                             className="progress-bar-fill"
-                            style={{
-                              background: isOver
-                                ? `linear-gradient(90deg, var(--accent-red), #ff6b8a)`
-                                : color,
-                              animation: isOver ? 'pulse 1s infinite' : undefined,
-                            }}
+                            style={{ background: color }}
                             initial={{ width: 0 }}
                             animate={{ width: `${Math.min(pct, 100)}%` }}
                             transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }}
@@ -361,20 +327,16 @@ export function BudgetPage() {
 
           {/* Bar Chart */}
           <div className="card" style={{ padding: '20px', height: '100%' }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>Budget vs actual spending</div>
+            <div className="card-title" style={{ marginBottom: 16 }}>Budget vs actual spending</div>
             <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 60)}>
               <BarChart data={chartData} layout="vertical" margin={{ left: 0, right: 20, top: 0, bottom: 0 }} barGap={4} barCategoryGap="25%">
-                <CartesianGrid strokeDasharray="3 3" stroke="var(--surface-border)" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 10, fill: 'var(--text-tertiary)' }} tickFormatter={v => formatVNDCompact(v)} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="name" tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={200} />
-                <Tooltip
-                  cursor={{ fill: 'transparent' }}
-                  formatter={(v, name) => [formatVND(Number(v ?? 0)), String(name)]}
-                  contentStyle={{ background: 'var(--bg-tertiary)', border: '1px solid var(--surface-border)', borderRadius: 8, fontSize: 12 }}
-                />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Bar dataKey="Budget" fill="rgba(61,142,248,0.6)" radius={[0, 4, 4, 0]} maxBarSize={20} />
-                <Bar dataKey="Spent" fill="rgba(255,77,109,0.8)" radius={[0, 4, 4, 0]} maxBarSize={20} />
+                <CartesianGrid {...GRID_STYLE} horizontal={false} />
+                <XAxis type="number" tick={AXIS_STYLE} tickFormatter={v => formatVNDCompact(v)} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" tick={{ ...AXIS_STYLE, fill: 'var(--text-secondary)' }} axisLine={false} tickLine={false} width={200} />
+                <Tooltip cursor={{ fill: 'var(--surface)', radius: 8 }} content={<ChartTooltip />} />
+                <Legend wrapperStyle={{ fontSize: 12, color: 'var(--text-secondary)', paddingTop: 8 }} iconType="circle" iconSize={8} />
+                <Bar dataKey="Budget" fill="var(--accent-blue)" fillOpacity={0.5} radius={[0, 5, 5, 0]} maxBarSize={20} animationDuration={800} animationEasing="ease-out" />
+                <Bar dataKey="Spent" fill="var(--accent-red)" fillOpacity={0.9} radius={[0, 5, 5, 0]} maxBarSize={20} animationDuration={800} animationEasing="ease-out" animationBegin={150} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -424,13 +386,6 @@ export function BudgetPage() {
       </AnimatePresence>
       </Portal>
       <style jsx>{`
-        .budget-summary-grid {
-          display: grid;
-          grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-          gap: 16px;
-          margin-bottom: 24px;
-        }
-
         .budget-content-grid {
           display: grid;
           grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

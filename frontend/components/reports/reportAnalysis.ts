@@ -10,6 +10,7 @@ export interface ReportAnalysis {
   expenseDeltaPct: number
   incomeDeltaPct: number
   savingsDeltaPct: number
+  expenseDeltaAmount: number
   topExpense?: CategoryComparison
   topIncome?: CategoryComparison
   topIncrease?: CategoryComparison
@@ -19,6 +20,12 @@ export interface ReportAnalysis {
   fixedExpense: number
   variableExpense: number
   fixedExpensePct: number
+  /** Average expense per chart point: per day (month mode) or per month (year mode). */
+  avgExpensePerPoint: number
+  /** Points (days/months) with any spending. */
+  activeSpendingPoints: number
+  /** Total chart points in the period: days (month mode) or months (year mode). */
+  totalPoints: number
   insights: ReportInsight[]
 }
 
@@ -78,6 +85,13 @@ export function analyzeReport(data: ReportsData): ReportAnalysis {
   const variableExpense = Math.max(0, data.current.expense - fixedExpense)
   const fixedExpensePct = data.current.expense > 0 ? (fixedExpense / data.current.expense) * 100 : 0
 
+  const expenseDeltaAmount = data.current.expense - data.previous.expense
+  const avgExpensePerPoint = data.chartData.length > 0
+    ? data.current.expense / data.chartData.length
+    : 0
+  const activeSpendingPoints = data.chartData.filter(p => p.expense > 0).length
+  const totalPoints = data.chartData.length
+
   const insights: ReportInsight[] = [
     {
       tone: data.current.savings >= 0 ? 'good' : 'warning',
@@ -106,10 +120,25 @@ export function analyzeReport(data: ReportsData): ReportAnalysis {
     })
   }
 
+  // Category spike: >50% jump vs previous period with a meaningful base amount
+  const spike = movedExpenses.find(c =>
+    c.previous > 0 &&
+    c.current > c.previous * 1.5 &&
+    c.current >= data.current.expense * 0.1,
+  )
+  if (spike) {
+    insights.push({
+      tone: 'warning',
+      title: `${spike.name} spiked`,
+      detail: `${spike.name} jumped ${asSignedPct(pctDelta(spike.current, spike.previous))} to ${spike.current.toLocaleString('en-US')} VND vs the previous period.`,
+    })
+  }
+
   return {
     expenseDeltaPct,
     incomeDeltaPct,
     savingsDeltaPct,
+    expenseDeltaAmount,
     topExpense,
     topIncome,
     topIncrease,
@@ -119,6 +148,9 @@ export function analyzeReport(data: ReportsData): ReportAnalysis {
     fixedExpense,
     variableExpense,
     fixedExpensePct,
+    avgExpensePerPoint,
+    activeSpendingPoints,
+    totalPoints,
     insights,
   }
 }

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
+import { PageHeader } from '@/components/ui/PageHeader'
 import { Portal } from '@/components/ui/Portal'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -9,11 +10,13 @@ import {
   Save, Trash2, Plus, Edit2, Moon, Sun, Brain,
   FileText, Tag, Info, User, Palette, Shield,
   RefreshCw, CheckCircle, ChevronRight, Sparkles, Filter,
+  AlertTriangle,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
 import { useAppStore } from '@/store/useAppStore'
 import { apiDelete, apiGet, apiJson, queryKeys } from '@/lib/api'
 import { Select } from '@/components/ui/Select'
+import { Stat } from '@/components/ui/Stat'
 import { useMemoryFacts, useDeleteFact, useVerifyFact, UserFact } from '@/hooks/useMemoryFacts'
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -28,13 +31,13 @@ interface Digest {
 
 type SectionId = 'profile' | 'appearance' | 'memory' | 'digest' | 'categories' | 'about'
 
-const SECTIONS: { id: SectionId; label: string; icon: React.ElementType; color: string }[] = [
-  { id: 'profile',    label: 'Profile',       icon: User,      color: 'var(--accent-blue)' },
-  { id: 'appearance', label: 'Appearance',      icon: Palette,   color: 'var(--accent-purple)' },
-  { id: 'memory',     label: 'AI Memory',      icon: Brain,     color: 'var(--accent-purple)' },
-  { id: 'digest',     label: 'Monthly digest',  icon: FileText,  color: 'var(--accent-green)' },
-  { id: 'categories', label: 'Category',        icon: Tag,       color: 'var(--accent-gold)' },
-  { id: 'about',      label: 'About',    icon: Info,      color: 'var(--text-secondary)' },
+const SECTIONS: { id: SectionId; label: string; icon: React.ElementType }[] = [
+  { id: 'profile',    label: 'Profile',        icon: User },
+  { id: 'appearance', label: 'Appearance',     icon: Palette },
+  { id: 'memory',     label: 'AI Memory',      icon: Brain },
+  { id: 'digest',     label: 'Monthly digest', icon: FileText },
+  { id: 'categories', label: 'Category',       icon: Tag },
+  { id: 'about',      label: 'About',          icon: Info },
 ]
 
 // ── Category constants ────────────────────────────────────────────────────────
@@ -50,6 +53,12 @@ const CAT_ICONS = [
   '💼','🛠️','🤖','⚙️','🔒','🛡️','🤝','🎉','🔥','✨','⭐',
 ]
 
+const BUDGET_GROUPS = [
+  { value: '', label: 'Uncategorized', color: '#6b7280' },
+  { value: 'needs', label: 'Needs (50%)', color: '#3b82f6' },
+  { value: 'wants', label: 'Wants (30%)', color: '#10b981' },
+]
+
 // ── Memory helpers ────────────────────────────────────────────────────────────
 
 const CATEGORY_LABELS: Record<string, string> = {
@@ -60,8 +69,8 @@ const CATEGORY_LABELS: Record<string, string> = {
 const CATEGORY_COLORS: Record<string, string> = {
   preference:'var(--accent-blue)', habit:'var(--accent-purple)',
   goal:'var(--accent-green)', context:'var(--accent-gold)',
-  pattern:'var(--accent-amber)', commitment:'#ef4444',
-  emotion:'#d946ef', general:'var(--text-secondary)',
+  pattern:'var(--accent-amber)', commitment:'var(--accent-red)',
+  emotion:'var(--accent-purple-light)', general:'var(--text-secondary)',
 }
 
 function ImportanceDots({ value }: { value: number }) {
@@ -69,7 +78,7 @@ function ImportanceDots({ value }: { value: number }) {
     <span style={{ display:'flex', gap:2 }}>
       {Array.from({ length:10 }).map((_,i) => (
         <span key={i} style={{ width:5,height:5,borderRadius:'50%',
-          background: i < value ? 'var(--accent-green)' : 'var(--border)' }} />
+          background: i < value ? 'var(--accent-green)' : 'var(--surface-border)' }} />
       ))}
     </span>
   )
@@ -90,7 +99,7 @@ function DigestContent({ content }: { content: string }) {
           <div key={i}>
             {title && (
               <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)',
-                borderBottom:'1px solid var(--border)', paddingBottom:6, marginBottom:8 }}>
+                borderBottom:'1px solid var(--surface-border)', paddingBottom:6, marginBottom:8 }}>
                 {title}
               </div>
             )}
@@ -224,13 +233,13 @@ export function SettingsPage() {
 
   function renderProfile() {
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={User} color="var(--accent-blue)" title="Profile information" subtitle="Display name used in the app" />
+      <div className="settings-section">
+        <SectionHeader icon={User} title="Profile information" subtitle="Display name used in the app" />
         <div style={{ display:'flex', alignItems:'center', gap:20 }}>
           <div style={{ width:72, height:72, borderRadius:'50%', flexShrink:0,
-            background:'linear-gradient(135deg, var(--accent-green), var(--accent-blue))',
+            background:'var(--accent-green)',
             display:'flex', alignItems:'center', justifyContent:'center',
-            fontSize:28, fontWeight:700, color:'#fff' }}>
+            fontSize:28, fontWeight:700, color:'var(--text-inverse)' }}>
             {userName.charAt(0)?.toUpperCase() ?? '?'}
           </div>
           <div style={{ flex:1 }}>
@@ -241,8 +250,7 @@ export function SettingsPage() {
           </div>
         </div>
         <div>
-          <button className="btn btn-primary btn-sm" onClick={saveProfile} disabled={saving}
-            style={{ display:'flex', alignItems:'center', gap:6 }}>
+          <button className="btn btn-primary btn-sm" onClick={saveProfile} disabled={saving}>
             <Save size={14} />
             {saving ? 'Saving...' : 'Save changes'}
           </button>
@@ -253,15 +261,11 @@ export function SettingsPage() {
 
   function renderAppearance() {
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={Palette} color="var(--accent-purple)" title="Appearance" subtitle="Display mode" />
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between',
-          padding:'14px 16px', background:'var(--surface)', borderRadius:12,
-          border:'1px solid var(--border)' }}>
+      <div className="settings-section">
+        <SectionHeader icon={Palette} title="Appearance" subtitle="Display mode" />
+        <div className="surface-row" style={{ justifyContent:'space-between' }}>
           <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            {theme==='dark'
-              ? <Moon size={18} style={{ color:'var(--accent-blue)' }} />
-              : <Sun size={18} style={{ color:'var(--accent-gold)' }} />}
+            {theme==='dark' ? <Moon size={18} /> : <Sun size={18} />}
             <div>
               <div style={{ fontSize:14, fontWeight:500 }}>{theme==='dark' ? 'Dark mode' : 'Light mode'}</div>
               <div style={{ fontSize:12, color:'var(--text-secondary)' }}>
@@ -269,9 +273,9 @@ export function SettingsPage() {
               </div>
             </div>
           </div>
-          <button onClick={toggleTheme} style={{
+          <button onClick={toggleTheme} aria-label="Toggle theme" style={{
             width:48, height:26, borderRadius:13, border:'none', cursor:'pointer',
-            background: theme==='dark' ? 'var(--accent-blue)' : 'var(--accent-gold)',
+            background:'var(--accent-green)',
             position:'relative', transition:'background 0.2s',
           }}>
             <motion.div style={{ position:'absolute', top:3, width:20, height:20,
@@ -286,36 +290,37 @@ export function SettingsPage() {
 
   function renderMemory() {
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-          <SectionHeader icon={Brain} color="var(--accent-purple)" title="AI Memory"
+      <div className="settings-section" style={{ gap:20 }}>
+        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:16 }}>
+          <SectionHeader icon={Brain} title="AI Memory"
             subtitle="What the assistant remembers about you" />
-          <div style={{ display:'flex', gap:16, textAlign:'right', flexShrink:0 }}>
-            <div>
-              <div style={{ fontSize:20, fontWeight:700, color:'var(--accent-green)' }}>{facts.length}</div>
-              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Total facts</div>
-            </div>
-            <div>
-              <div style={{ fontSize:20, fontWeight:700, color:'var(--accent-blue)' }}>{verifiedCount}</div>
-              <div style={{ fontSize:11, color:'var(--text-secondary)' }}>Confirmed</div>
-            </div>
+          <div className="stat-strip" style={{ gap:'var(--space-4)', flexShrink:0 }}>
+            <Stat label="Total facts" value={facts.length} />
+            <Stat label="Confirmed" value={verifiedCount} color="var(--accent-green)" />
           </div>
         </div>
 
         {/* Category filter */}
         <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
           <Filter size={12} color="var(--text-secondary)" />
-          {factCategories.map(cat => (
-            <button key={cat} onClick={() => setFilterCat(cat)} style={{
-              padding:'3px 10px', borderRadius:16, fontSize:12, cursor:'pointer',
-              border:`1px solid ${filterCat===cat ? CATEGORY_COLORS[cat]??'var(--accent-blue)' : 'var(--border)'}`,
-              background: filterCat===cat ? `${CATEGORY_COLORS[cat]??'var(--accent-blue)'}18` : 'transparent',
-              color: filterCat===cat ? CATEGORY_COLORS[cat]??'var(--accent-blue)' : 'var(--text-secondary)',
-              fontWeight: filterCat===cat ? 600 : 400,
-            }}>
-              {cat==='all' ? 'All' : CATEGORY_LABELS[cat]??cat}
-            </button>
-          ))}
+          {factCategories.map(cat => {
+            const active = filterCat === cat
+            const color = CATEGORY_COLORS[cat] ?? 'var(--accent-blue)'
+            return (
+              <button
+                key={cat}
+                onClick={() => setFilterCat(cat)}
+                className={`chip-toggle${active ? ' active' : ''}`}
+                style={active ? {
+                  borderColor: color,
+                  background: `color-mix(in srgb, ${color} 10%, transparent)`,
+                  color,
+                } : undefined}
+              >
+                {cat==='all' ? 'All' : CATEGORY_LABELS[cat]??cat}
+              </button>
+            )
+          })}
         </div>
 
         {/* Facts list */}
@@ -323,63 +328,63 @@ export function SettingsPage() {
           <div style={{ color:'var(--text-secondary)', textAlign:'center', padding:32 }}>Loading...</div>
         ) : filteredFacts.length===0 ? (
           <div style={{ textAlign:'center', padding:40, color:'var(--text-secondary)',
-            border:'1px dashed var(--border)', borderRadius:12 }}>
-            <Brain size={28} style={{ opacity:0.25, marginBottom:8, display:'block', margin:'0 auto 8px' }} />
+            border:'1px dashed var(--surface-border)', borderRadius:12 }}>
+            <Brain size={28} style={{ opacity:0.25, display:'block', margin:'0 auto 8px' }} />
             No facts yet. Chat with AI to get started.
           </div>
         ) : (
           <div style={{ display:'flex', flexDirection:'column', gap:8, maxHeight:420, overflowY:'auto', paddingRight:4 }}>
-            {filteredFacts.map(fact => (
-              <motion.div key={fact.id} layout
-                style={{ background:'var(--surface)',
-                  border:`1px solid ${fact.verifiedByUser?'var(--accent-green)33':'var(--border)'}`,
-                  borderLeft:`3px solid ${CATEGORY_COLORS[fact.category]??'var(--border)'}`,
-                  borderRadius:10, padding:'12px 14px',
-                  display:'flex', gap:12, alignItems:'flex-start' }}>
-                {/* Left */}
-                <div style={{ minWidth:80, flexShrink:0 }}>
-                  <div style={{ fontSize:11, fontWeight:600, marginBottom:4,
-                    color: CATEGORY_COLORS[fact.category]??'var(--text-secondary)' }}>
-                    {CATEGORY_LABELS[fact.category]??fact.category}
-                  </div>
-                  <ImportanceDots value={fact.importance} />
-                  <div style={{ fontSize:10, color:'var(--text-secondary)', marginTop:2 }}>{fact.importance}/10</div>
-                </div>
-                {/* Middle */}
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:13, lineHeight:1.5, marginBottom: fact.topics.length ? 5 : 0 }}>
-                    {fact.verifiedByUser && <Shield size={11} color="var(--accent-green)" style={{ marginRight:4, verticalAlign:'middle', display:'inline' }} />}
-                    {fact.fact}
-                  </div>
-                  {fact.topics.length>0 && (
-                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                      {fact.topics.map(t => (
-                        <span key={t} style={{ fontSize:10, padding:'1px 6px', borderRadius:8,
-                          background:'var(--bg-card, var(--surface))', border:'1px solid var(--border)',
-                          color:'var(--text-secondary)' }}>{t}</span>
-                      ))}
+            {filteredFacts.map(fact => {
+              const catColor = CATEGORY_COLORS[fact.category] ?? 'var(--surface-border)'
+              return (
+                <motion.div key={fact.id} layout
+                  style={{ background:'var(--surface)',
+                    border:`1px solid ${fact.verifiedByUser ? `color-mix(in srgb, var(--accent-green) 20%, transparent)` : 'var(--surface-border)'}`,
+                    borderLeft:`3px solid ${catColor}`,
+                    borderRadius:10, padding:'12px 14px',
+                    display:'flex', gap:12, alignItems:'flex-start' }}>
+                  {/* Left */}
+                  <div style={{ minWidth:80, flexShrink:0 }}>
+                    <div style={{ fontSize:11, fontWeight:600, marginBottom:4, color:catColor }}>
+                      {CATEGORY_LABELS[fact.category]??fact.category}
                     </div>
-                  )}
-                </div>
-                {/* Right actions */}
-                <div style={{ display:'flex', gap:4, flexShrink:0 }}>
-                  {!fact.verifiedByUser && (
-                    <button onClick={() => verifyFact.mutate(fact)} title="Confirm" style={{
-                      padding:5, background:'transparent', border:'1px solid var(--border)',
-                      borderRadius:6, cursor:'pointer', color:'var(--accent-green)',
-                      display:'flex', alignItems:'center' }}>
-                      <CheckCircle size={13} />
+                    <ImportanceDots value={fact.importance} />
+                    <div style={{ fontSize:10, color:'var(--text-secondary)', marginTop:2 }}>{fact.importance}/10</div>
+                  </div>
+                  {/* Middle */}
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, lineHeight:1.5, marginBottom: fact.topics.length ? 5 : 0 }}>
+                      {fact.verifiedByUser && <Shield size={11} color="var(--accent-green)" style={{ marginRight:4, verticalAlign:'middle', display:'inline' }} />}
+                      {fact.fact}
+                    </div>
+                    {fact.topics.length>0 && (
+                      <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                        {fact.topics.map(t => (
+                          <span key={t} style={{ fontSize:10, padding:'1px 6px', borderRadius:8,
+                            background:'var(--surface)', border:'1px solid var(--surface-border)',
+                            color:'var(--text-secondary)' }}>{t}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {/* Right actions */}
+                  <div style={{ display:'flex', gap:4, flexShrink:0 }}>
+                    {!fact.verifiedByUser && (
+                      <button onClick={() => verifyFact.mutate(fact)} title="Confirm"
+                        className="btn btn-ghost btn-sm"
+                        style={{ padding:5, color:'var(--accent-green)', border:'1px solid var(--surface-border)' }}>
+                        <CheckCircle size={13} />
+                      </button>
+                    )}
+                    <button onClick={() => setDeleteFactTarget(fact)} title="Delete"
+                      className="btn btn-ghost btn-sm"
+                      style={{ padding:5, border:'1px solid var(--surface-border)' }}>
+                      <Trash2 size={13} />
                     </button>
-                  )}
-                  <button onClick={() => setDeleteFactTarget(fact)} title="Delete" style={{
-                    padding:5, background:'transparent', border:'1px solid var(--border)',
-                    borderRadius:6, cursor:'pointer', color:'var(--text-secondary)',
-                    display:'flex', alignItems:'center' }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              </motion.div>
-            ))}
+                  </div>
+                </motion.div>
+              )
+            })}
           </div>
         )}
       </div>
@@ -389,13 +394,13 @@ export function SettingsPage() {
   function renderDigest() {
     const isGenerating = generateDigest.isPending
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
+      <div className="settings-section">
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
-          <SectionHeader icon={FileText} color="var(--accent-green)" title="Monthly digest"
+          <SectionHeader icon={FileText} title="Monthly digest"
             subtitle="AI summarizes your finances and suggests actions" />
           <button onClick={() => generateDigest.mutate()} disabled={isGenerating}
             className="btn btn-primary btn-sm"
-            style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0, whiteSpace:'nowrap' }}>
+            style={{ flexShrink:0, whiteSpace:'nowrap' }}>
             {isGenerating
               ? <><RefreshCw size={13} style={{ animation:'spin 1s linear infinite' }} /> Generating...</>
               : <><Sparkles size={13} /> Generate new digest</>}
@@ -403,35 +408,32 @@ export function SettingsPage() {
         </div>
 
         {isGenerating && (
-          <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:12,
+          <div style={{ background:'var(--surface)', border:'1px solid var(--surface-border)', borderRadius:12,
             padding:24, textAlign:'center', color:'var(--text-secondary)', fontSize:13 }}>
-            <RefreshCw size={20} style={{ animation:'spin 1s linear infinite', marginBottom:8, display:'block', margin:'0 auto 8px' }} />
+            <RefreshCw size={20} style={{ animation:'spin 1s linear infinite', display:'block', margin:'0 auto 8px' }} />
             AI is analyzing your financial data... (5-15 seconds)
           </div>
         )}
 
         {!isGenerating && !latestDigest && !digestLoading && (
           <div style={{ textAlign:'center', padding:48, color:'var(--text-secondary)',
-            border:'1px dashed var(--border)', borderRadius:12, fontSize:13 }}>
+            border:'1px dashed var(--surface-border)', borderRadius:12, fontSize:13 }}>
             <FileText size={28} style={{ opacity:0.25, display:'block', margin:'0 auto 10px' }} />
             No digests yet. Click &quot;Generate new digest&quot; to get started.
           </div>
         )}
 
         {latestDigest && !isGenerating && (
-          <div style={{ background:'var(--surface)', border:'1px solid var(--border)', borderRadius:12, padding:24 }}>
+          <div style={{ background:'var(--surface)', border:'1px solid var(--surface-border)', borderRadius:12, padding:24 }}>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20,
-              paddingBottom:14, borderBottom:'1px solid var(--border)' }}>
+              paddingBottom:14, borderBottom:'1px solid var(--surface-border)' }}>
               <div>
                 <div style={{ fontSize:14, fontWeight:700 }}>Monthly digest {latestDigest.generatedForMonth}</div>
                 <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:2 }}>
                   Generated at {new Date(latestDigest.createdAt).toLocaleString('en-US')}
                 </div>
               </div>
-              <div style={{ padding:'4px 10px', borderRadius:6, background:'var(--accent-green)15',
-                color:'var(--accent-green)', fontSize:11, fontWeight:600 }}>
-                Latest
-              </div>
+              <span className="badge badge-green">Latest</span>
             </div>
             <DigestContent content={latestDigest.content} />
           </div>
@@ -442,13 +444,12 @@ export function SettingsPage() {
 
   function renderCategories() {
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
+      <div className="settings-section" style={{ gap:20 }}>
         <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between' }}>
-          <SectionHeader icon={Tag} color="var(--accent-gold)" title="Manage categories"
+          <SectionHeader icon={Tag} title="Manage categories"
             subtitle="Customize income and expense categories" />
           <button onClick={() => { resetCatForm(); setShowCatForm(true) }}
-            className="btn btn-primary btn-sm"
-            style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+            className="btn btn-primary btn-sm" style={{ flexShrink:0 }}>
             <Plus size={13} /> Add category
           </button>
         </div>
@@ -457,7 +458,7 @@ export function SettingsPage() {
           {showCatForm && (
             <motion.div initial={{ opacity:0, height:0 }} animate={{ opacity:1, height:'auto' }}
               exit={{ opacity:0, height:0 }}
-              style={{ background:'var(--bg-tertiary, var(--surface))', border:'1px solid var(--border)',
+              style={{ background:'var(--bg-tertiary)', border:'1px solid var(--surface-border)',
                 borderRadius:12, padding:16, overflow:'hidden' }}>
               <div style={{ fontSize:14, fontWeight:600, marginBottom:12 }}>{editCat ? 'Edit category' : 'New category'}</div>
               {/* Icons */}
@@ -466,7 +467,7 @@ export function SettingsPage() {
                 {CAT_ICONS.map(i => (
                   <button key={i} onClick={()=>setCatIcon(i)} style={{
                     fontSize:18, width:38, height:38, borderRadius:8, cursor:'pointer',
-                    border:`2px solid ${catIcon===i ? catColor : 'var(--border)'}`,
+                    border:`2px solid ${catIcon===i ? catColor : 'var(--surface-border)'}`,
                     background: catIcon===i ? `${catColor}20` : 'var(--surface)',
                   }}>{i}</button>
                 ))}
@@ -474,7 +475,7 @@ export function SettingsPage() {
               {/* Colors */}
               <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:12 }}>
                 {CAT_COLORS.map(c => (
-                  <button key={c} onClick={()=>setCatColor(c)} style={{
+                  <button key={c} onClick={()=>setCatColor(c)} aria-label={`Color ${c}`} style={{
                     width:26, height:26, borderRadius:'50%', background:c, cursor:'pointer',
                     border:`3px solid ${catColor===c ? 'var(--text-primary)' : 'transparent'}`,
                   }} />
@@ -496,16 +497,20 @@ export function SettingsPage() {
                 <div style={{ marginBottom:12 }}>
                   <label className="label" style={{ marginBottom:6, display:'block' }}>50/30/20 group</label>
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                    {[{value:'',label:'Uncategorized',color:'#6b7280'},
-                      {value:'needs',label:'🏠 Needs (50%)',color:'#3b82f6'},
-                      {value:'wants',label:'🎬 Wants (30%)',color:'#10b981'}].map(opt => (
-                      <button key={opt.value} type="button" onClick={()=>setCatBudgetGroup(opt.value)} style={{
-                        padding:'5px 10px', borderRadius:8, fontSize:12, cursor:'pointer',
-                        border:`2px solid ${catBudgetGroup===opt.value ? opt.color : 'var(--border)'}`,
-                        background: catBudgetGroup===opt.value ? `${opt.color}20` : 'var(--surface)',
-                        color: catBudgetGroup===opt.value ? opt.color : 'var(--text-secondary)', fontWeight:600,
-                      }}>{opt.label}</button>
-                    ))}
+                    {BUDGET_GROUPS.map(opt => {
+                      const active = catBudgetGroup === opt.value
+                      return (
+                        <button key={opt.value} type="button" onClick={()=>setCatBudgetGroup(opt.value)}
+                          className={`chip-toggle${active ? ' active' : ''}`}
+                          style={active ? {
+                            borderColor: opt.color,
+                            background: `${opt.color}20`,
+                            color: opt.color,
+                          } : undefined}>
+                          {opt.label}
+                        </button>
+                      )
+                    })}
                   </div>
                 </div>
               )}
@@ -519,8 +524,7 @@ export function SettingsPage() {
 
         <div className="settings-category-grid">
           <div>
-            <div style={{ fontSize:11, color:'var(--text-secondary)', fontWeight:600,
-              textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>
+            <div className="stat-label" style={{ marginBottom:8 }}>
               Income ({incomeCategories.length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
@@ -528,8 +532,7 @@ export function SettingsPage() {
             </div>
           </div>
           <div>
-            <div style={{ fontSize:11, color:'var(--text-secondary)', fontWeight:600,
-              textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:8 }}>
+            <div className="stat-label" style={{ marginBottom:8 }}>
               Expense ({expenseCategories.length})
             </div>
             <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
@@ -543,20 +546,18 @@ export function SettingsPage() {
 
   function renderAbout() {
     return (
-      <div style={{ display:'flex', flexDirection:'column', gap:24 }}>
-        <SectionHeader icon={Info} color="var(--text-secondary)" title="About" subtitle="Version information" />
+      <div className="settings-section">
+        <SectionHeader icon={Info} title="About" subtitle="Version information" />
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
           {[
-            { label:'Version', value:'1.0.0', color:'var(--accent-green)' },
-            { label:'AI Model', value:'Claude Sonnet 4.6', color:'var(--accent-purple)' },
-            { label:'Tech Stack', value:'Next.js + FastAPI + PostgreSQL', color:'var(--text-primary)' },
-            { label:'Created by', value:'WealthLog Team', color:'var(--text-primary)' },
+            { label:'Version', value:'1.0.0' },
+            { label:'AI Model', value:'Claude Sonnet 4.6' },
+            { label:'Tech Stack', value:'Next.js + FastAPI + PostgreSQL' },
+            { label:'Created by', value:'WealthLog Team' },
           ].map(item => (
-            <div key={item.label} style={{ display:'flex', justifyContent:'space-between',
-              alignItems:'center', padding:'12px 16px', background:'var(--surface)',
-              borderRadius:10, border:'1px solid var(--border)' }}>
+            <div key={item.label} className="surface-row" style={{ justifyContent:'space-between' }}>
               <span style={{ fontSize:13, color:'var(--text-secondary)' }}>{item.label}</span>
-              <span style={{ fontSize:13, fontWeight:600, color:item.color }}>{item.value}</span>
+              <span style={{ fontSize:13, fontWeight:600 }}>{item.value}</span>
             </div>
           ))}
         </div>
@@ -579,10 +580,11 @@ export function SettingsPage() {
     <PageTransition>
       <div>
         {/* Page header */}
-        <div style={{ marginBottom:28 }}>
-          <h1 style={{ fontSize:22, fontWeight:700, marginBottom:4 }}>Settings</h1>
-          <p style={{ fontSize:13, color:'var(--text-secondary)' }}>Customize the app to your preferences</p>
-        </div>
+        <PageHeader
+          eyebrow="Preferences"
+          title="Settings"
+          subtitle="Customize the app to your preferences"
+        />
 
         {/* Two-column layout */}
         <div className="settings-shell-grid">
@@ -592,14 +594,8 @@ export function SettingsPage() {
               const Icon = sec.icon
               const active = activeSection === sec.id
               return (
-                <button key={sec.id} onClick={() => setActiveSection(sec.id)} style={{
-                  display:'flex', alignItems:'center', gap:10, padding:'9px 12px',
-                  borderRadius:10, border:'none', cursor:'pointer', textAlign:'left',
-                  background: active ? `${sec.color}15` : 'transparent',
-                  color: active ? sec.color : 'var(--text-secondary)',
-                  fontWeight: active ? 600 : 400, fontSize:13,
-                  transition:'all 0.15s',
-                }}>
+                <button key={sec.id} onClick={() => setActiveSection(sec.id)}
+                  className={`settings-nav-item${active ? ' active' : ''}`}>
                   <Icon size={15} />
                   <span style={{ flex:1 }}>{sec.label}</span>
                   {active && <ChevronRight size={13} />}
@@ -626,7 +622,9 @@ export function SettingsPage() {
           <>
             <div className="overlay" onClick={() => setDeleteFactTarget(null)} />
             <div className="modal" style={{ padding:28, textAlign:'center' }}>
-              <div style={{ fontSize:36, marginBottom:10 }}>🗑️</div>
+              <div style={{ width:48, height:48, borderRadius:'50%', background:'var(--accent-red-subtle)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}>
+                <Trash2 size={22} style={{ color:'var(--accent-red)' }} />
+              </div>
               <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Delete this fact?</h3>
               <p style={{ fontSize:13, color:'var(--text-secondary)', marginBottom:24 }}>{deleteFactTarget.fact}</p>
               <div style={{ display:'flex', gap:10 }}>
@@ -647,7 +645,9 @@ export function SettingsPage() {
           <>
             <div className="overlay" onClick={()=>setDeleteConfirm(null)} />
             <div className="modal" style={{ padding:28, textAlign:'center' }}>
-              <div style={{ fontSize:36, marginBottom:10 }}>⚠️</div>
+              <div style={{ width:48, height:48, borderRadius:'50%', background:'var(--accent-red-subtle)', display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 12px' }}>
+                <AlertTriangle size={22} style={{ color:'var(--accent-red)' }} />
+              </div>
               <h3 style={{ fontSize:16, fontWeight:700, marginBottom:8 }}>Delete category?</h3>
               <p style={{ fontSize:13, color:'var(--text-secondary)', marginBottom:24 }}>
                 Related transactions will not be deleted, but they will lose this category.
@@ -671,13 +671,48 @@ export function SettingsPage() {
 
         .settings-nav {
           position: sticky;
-          top: 24px;
+          top: calc(var(--header-height) + var(--space-6));
           display: flex;
           flex-direction: column;
           gap: 2px;
         }
 
-        .settings-category-grid {
+        .settings-section,
+        :global(.settings-section) {
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        }
+
+        .settings-nav :global(.settings-nav-item) {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 9px 12px;
+          border-radius: var(--radius-md);
+          border: none;
+          cursor: pointer;
+          text-align: left;
+          background: transparent;
+          color: var(--text-secondary);
+          font-weight: 400;
+          font-size: 13px;
+          transition: color var(--duration-fast) ease, background var(--duration-fast) ease;
+        }
+
+        .settings-nav :global(.settings-nav-item:hover) {
+          background: var(--surface-hover);
+          color: var(--text-primary);
+        }
+
+        .settings-nav :global(.settings-nav-item.active) {
+          background: var(--accent-green-subtle);
+          color: var(--accent-green);
+          font-weight: 600;
+        }
+
+        .settings-category-grid,
+        :global(.settings-category-grid) {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
           gap: 16px;
@@ -696,13 +731,14 @@ export function SettingsPage() {
             scrollbar-width: thin;
           }
 
-          .settings-nav :global(button) {
+          .settings-nav :global(.settings-nav-item) {
             flex: 0 0 auto;
           }
         }
 
         @media (max-width: 720px) {
-          .settings-category-grid {
+          .settings-category-grid,
+          :global(.settings-category-grid) {
             grid-template-columns: 1fr;
           }
         }
@@ -714,18 +750,17 @@ export function SettingsPage() {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SectionHeader({ icon: Icon, color, title, subtitle }: {
-  icon: React.ElementType; color: string; title: string; subtitle: string
+function SectionHeader({ icon: Icon, title, subtitle }: {
+  icon: React.ElementType; title: string; subtitle: string
 }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-      <div style={{ width:38, height:38, borderRadius:10, background:`${color}18`,
-        display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
-        <Icon size={18} color={color} />
+    <div className="section-header">
+      <div className="icon-tile">
+        <Icon size={18} />
       </div>
       <div>
-        <div style={{ fontSize:15, fontWeight:700 }}>{title}</div>
-        <div style={{ fontSize:12, color:'var(--text-secondary)' }}>{subtitle}</div>
+        <div className="section-header-title">{title}</div>
+        <div className="section-header-sub">{subtitle}</div>
       </div>
     </div>
   )
@@ -737,8 +772,7 @@ function CatRow({ cat, onEdit, onDelete }: {
   onDelete: (id: string) => void
 }) {
   return (
-    <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 10px',
-      borderRadius:8, background:'var(--surface)', border:'1px solid var(--border)' }}>
+    <div className="surface-row" style={{ gap:8, padding:'8px 10px' }}>
       <span style={{ fontSize:15 }}>{cat.icon}</span>
       <span style={{ flex:1, fontSize:13, fontWeight:500, display:'flex', alignItems:'center', gap:5, flexWrap:'wrap' }}>
         {cat.name}
@@ -753,9 +787,9 @@ function CatRow({ cat, onEdit, onDelete }: {
       <div style={{ width:9, height:9, borderRadius:'50%', background:cat.color, flexShrink:0 }} />
       {!cat.isDefault && (
         <>
-          <button onClick={()=>onEdit(cat)} className="btn btn-ghost btn-sm"
+          <button onClick={()=>onEdit(cat)} className="btn btn-ghost btn-sm" aria-label="Edit category"
             style={{ width:24,height:24,padding:0,borderRadius:'50%' }}><Edit2 size={11}/></button>
-          <button onClick={()=>onDelete(cat.id)} className="btn btn-ghost btn-sm"
+          <button onClick={()=>onDelete(cat.id)} className="btn btn-ghost btn-sm" aria-label="Delete category"
             style={{ width:24,height:24,padding:0,borderRadius:'50%',color:'var(--accent-red)' }}><Trash2 size={11}/></button>
         </>
       )}

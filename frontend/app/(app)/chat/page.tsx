@@ -3,10 +3,11 @@
 import { useRef, useEffect, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import Image from 'next/image'
-import { Plus, Trash2, ChevronDown, BarChart3, Wallet, TrendingUp, Target, ArrowDown } from 'lucide-react'
+import { Plus, Trash2, ChevronDown, BarChart3, Wallet, TrendingUp, Target, ArrowDown, ArrowRight } from 'lucide-react'
 import { ChatMessage } from '@/components/chat/ChatMessage'
 import { ChatInput } from '@/components/chat/ChatInput'
 import { useChat, useSessions, useModel } from '@/hooks/useChatState'
+import { getGreeting, timeAgo } from '@/lib/utils'
 
 const SUGGESTIONS = [
   { icon: BarChart3,  label: 'Financial overview this month', color: 'purple' },
@@ -14,6 +15,27 @@ const SUGGESTIONS = [
   { icon: TrendingUp, label: 'Top spending items',         color: 'green'  },
   { icon: Target,     label: 'Savings goal progress',    color: 'gold'   },
 ] as const
+
+/** Bucket sessions ChatGPT-style: Today / Yesterday / Previous 7 days / Older. */
+function groupSessionsByDate<T extends { updatedAt: string }>(sessions: T[]) {
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime()
+  const today = startOfDay(new Date())
+  const day = 86_400_000
+  const groups: { label: string; items: T[] }[] = [
+    { label: 'Today', items: [] },
+    { label: 'Yesterday', items: [] },
+    { label: 'Previous 7 days', items: [] },
+    { label: 'Older', items: [] },
+  ]
+  for (const s of sessions) {
+    const t = startOfDay(new Date(s.updatedAt))
+    if (t >= today) groups[0].items.push(s)
+    else if (t >= today - day) groups[1].items.push(s)
+    else if (t >= today - 7 * day) groups[2].items.push(s)
+    else groups[3].items.push(s)
+  }
+  return groups.filter(g => g.items.length > 0)
+}
 
 export default function ChatPage() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -24,7 +46,7 @@ export default function ChatPage() {
   const isSmoothScrollingRef = useRef(false)
 
   const { models, selectedModel, selectModel } = useModel()
-  const { messages, isStreaming, sessionId, sendMessage, newSession, loadSession } = useChat(selectedModel)
+  const { messages, isStreaming, sessionId, sendMessage, stopStreaming, retryLast, newSession, loadSession } = useChat(selectedModel)
   const { sessions, deleteSession } = useSessions(sessionId)
   const [showModelPicker, setShowModelPicker] = useState(false)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -61,6 +83,42 @@ export default function ChatPage() {
     return () => document.removeEventListener('mousedown', close)
   }, [showModelPicker])
 
+  // Model picker lives inside the composer (Claude/ChatGPT style), so the
+  // dropdown opens upward from the input footer.
+  const modelPicker = models.length > 0 ? (
+    <div className="chat-model-picker chat-model-picker--composer">
+      <button className="chat-modelbar-btn" onClick={() => setShowModelPicker(v => !v)}>
+        <span className={`chat-modelbar-dot${isStreaming ? ' streaming' : ''}`} />
+        <span className="chat-modelbar-name">
+          {models.find(m => m.id === selectedModel)?.name ?? selectedModel}
+        </span>
+        <ChevronDown size={13} />
+      </button>
+      <AnimatePresence>
+        {showModelPicker && (
+          <motion.div
+            className="chat-model-dropdown"
+            initial={{ opacity: 0, y: 6 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 6 }}
+            transition={{ duration: 0.15 }}
+          >
+            {models.map(m => (
+              <button
+                key={m.id}
+                className={`chat-model-option${m.id === selectedModel ? ' active' : ''}`}
+                onClick={() => { selectModel(m.id); setShowModelPicker(false) }}
+              >
+                <span className="chat-model-option-name">{m.name}</span>
+                <span className="chat-model-option-desc">{m.description}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  ) : null
+
   return (
     <div className="chat-page">
       {/* ── Left: Session History ── */}
@@ -78,23 +136,28 @@ export default function ChatPage() {
           {sessions.length === 0 ? (
             <p className="chat-page-session-empty">No conversations yet.</p>
           ) : (
-            sessions.map(s => (
-              <div
-                key={s.id}
-                className={`chat-page-session-item${s.id === activeSessionId ? ' active' : ''}`}
-                onClick={() => { setActiveSessionId(s.id); loadSession(s.id) }}
-              >
-                <div className="chat-page-session-info">
-                  <span className="chat-page-session-title">{s.title}</span>
-                  <span className="chat-page-session-meta">{s.messageCount} messages</span>
-                </div>
-                <button
-                  className="chat-page-session-delete"
-                  onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
-                  title="Delete"
-                >
-                  <Trash2 size={12} />
-                </button>
+            groupSessionsByDate(sessions).map(group => (
+              <div key={group.label}>
+                <div className="chat-page-session-group">{group.label}</div>
+                {group.items.map(s => (
+                  <div
+                    key={s.id}
+                    className={`chat-page-session-item${s.id === activeSessionId ? ' active' : ''}`}
+                    onClick={() => { setActiveSessionId(s.id); loadSession(s.id) }}
+                  >
+                    <div className="chat-page-session-info">
+                      <span className="chat-page-session-title">{s.title}</span>
+                      <span className="chat-page-session-meta">{timeAgo(s.updatedAt)} · {s.messageCount} {s.messageCount === 1 ? 'message' : 'messages'}</span>
+                    </div>
+                    <button
+                      className="chat-page-session-delete"
+                      onClick={e => { e.stopPropagation(); deleteSession(s.id) }}
+                      title="Delete"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+                ))}
               </div>
             ))
           )}
@@ -103,49 +166,12 @@ export default function ChatPage() {
 
       {/* ── Right: Conversation ── */}
       <div className="chat-page-main">
-        {/* Model bar — Unsloth style: status dot + model name left-aligned */}
-        {models.length > 0 && (
-          <div className="chat-page-modelbar">
-            <div className="chat-model-picker chat-model-picker--bar">
-              <button className="chat-modelbar-btn" onClick={() => setShowModelPicker(v => !v)}>
-                <span className="chat-modelbar-dot" />
-                <span className="chat-modelbar-name">
-                  {models.find(m => m.id === selectedModel)?.name ?? selectedModel}
-                </span>
-                <ChevronDown size={13} />
-              </button>
-              <AnimatePresence>
-                {showModelPicker && (
-                  <motion.div
-                    className="chat-model-dropdown"
-                    initial={{ opacity: 0, y: -6 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -6 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {models.map(m => (
-                      <button
-                        key={m.id}
-                        className={`chat-model-option${m.id === selectedModel ? ' active' : ''}`}
-                        onClick={() => { selectModel(m.id); setShowModelPicker(false) }}
-                      >
-                        <span className="chat-model-option-name">{m.name}</span>
-                        <span className="chat-model-option-desc">{m.description}</span>
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
-        )}
-
         {/* Messages */}
         <div className="chat-page-messages" ref={scrollContainerRef} onScroll={handleScroll}>
           {messages.length === 0 ? (
             <div className="chat-page-empty">
               <div className="chat-page-hero">
-                <div style={{ width: 140, height: 140, position: 'relative', flexShrink: 0 }}>
+                <div style={{ width: 112, height: 112, position: 'relative', flexShrink: 0 }}>
                   <Image
                     src="/images/ai-avatar.png"
                     alt="Expensep"
@@ -153,23 +179,24 @@ export default function ChatPage() {
                     style={{ objectFit: 'contain' }}
                   />
                 </div>
-                <h1 className="chat-page-hero-title">How can I help?</h1>
+                <h1 className="chat-page-hero-title">{getGreeting()} — how can I help?</h1>
                 <p className="chat-empty-sub" style={{ maxWidth: 340 }}>
                   Analyze spending, check budgets, track goals, and more.
                 </p>
               </div>
-              <div className="chat-empty-suggestions chat-page-suggestions">
+              <div className="chat-hero-suggestions">
                 {SUGGESTIONS.map(({ icon: Icon, label, color }) => (
-                  <button key={label} className="chat-suggest-card" onClick={() => sendMessage(label)}>
+                  <button key={label} className="chat-hero-suggest-row" onClick={() => sendMessage(label)}>
                     <div className={`chat-suggest-icon ${color}`}><Icon size={14} /></div>
-                    <span className="chat-suggest-label">{label}</span>
+                    <span>{label}</span>
+                    <ArrowRight size={14} className="chat-hero-suggest-arrow" />
                   </button>
                 ))}
               </div>
             </div>
           ) : (
             <div className="chat-page-messages-inner">
-              {messages.map(msg => <ChatMessage key={msg.id} message={msg} />)}
+              {messages.map(msg => <ChatMessage key={msg.id} message={msg} onRetry={retryLast} />)}
               <div ref={messagesEndRef} />
             </div>
           )}
@@ -201,7 +228,13 @@ export default function ChatPage() {
         {/* Input */}
         <div className="chat-page-input-wrap">
           <div className="chat-page-input-inner">
-            <ChatInput onSend={(msg) => { scrollToBottomSmooth(); sendMessage(msg) }} disabled={isStreaming} />
+            <ChatInput
+              onSend={(msg) => { scrollToBottomSmooth(); sendMessage(msg) }}
+              onStop={stopStreaming}
+              streaming={isStreaming}
+              accessory={modelPicker}
+            />
+            <div className="chat-composer-hint">Enter to send · Shift+Enter for a new line</div>
           </div>
         </div>
       </div>

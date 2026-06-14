@@ -23,6 +23,7 @@ export function applyChatStreamEvent(
           stepId: data.step_id as string,
           content: '',
           streaming: true,
+          startedAt: Date.now(),
         },
       ],
     }))
@@ -40,7 +41,7 @@ export function applyChatStreamEvent(
       ...message,
       steps: (message.steps || []).map(step =>
         step.kind === 'thinking' && step.stepId === data.step_id
-          ? { ...step, streaming: false }
+          ? { ...step, streaming: false, durationMs: step.startedAt ? Date.now() - step.startedAt : undefined }
           : step
       ),
     }))
@@ -138,6 +139,7 @@ export function applyChatStreamEvent(
             : step
         ),
         isStreaming: false,
+        workDurationMs: Date.now() - message.timestamp.getTime(),
       }
     }))
   }
@@ -155,29 +157,52 @@ export async function consumeChatStream(
   let buffer = ''
   let firstEventSeen = false
 
-  while (true) {
-    const { done, value } = await reader.read()
-    if (done) break
-    buffer += decoder.decode(value, { stream: true })
-    const lines = buffer.split('\n')
-    buffer = lines.pop() || ''
+  // Batch SSE events per animation frame: fast token streams emit dozens of
+  // events per second, and applying each one individually re-renders (and
+  // re-parses markdown) far more often than the screen can show.
+  const queue: Array<{ type: string; data: StreamData }> = []
+  let flushScheduled = false
+  const flush = () => {
+    flushScheduled = false
+    for (const event of queue.splice(0)) {
+      applyEvent(event.type, event.data, aiIdRef.current)
+    }
+  }
+  const enqueue = (type: string, data: StreamData) => {
+    queue.push({ type, data })
+    if (!flushScheduled) {
+      flushScheduled = true
+      requestAnimationFrame(flush)
+    }
+  }
 
-    let eventType = ''
-    for (const line of lines) {
-      if (line.startsWith('event: ')) {
-        eventType = line.slice(7).trim()
-      } else if (line.startsWith('data: ') && eventType) {
-        const data = JSON.parse(line.slice(6))
-        if (!firstEventSeen) {
-          firstEventSeen = true
-          if (onFirstEvent && !onFirstEvent(eventType, data)) {
-            await reader.cancel().catch(() => {})
-            return
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      buffer += decoder.decode(value, { stream: true })
+      const lines = buffer.split('\n')
+      buffer = lines.pop() || ''
+
+      let eventType = ''
+      for (const line of lines) {
+        if (line.startsWith('event: ')) {
+          eventType = line.slice(7).trim()
+        } else if (line.startsWith('data: ') && eventType) {
+          const data = JSON.parse(line.slice(6))
+          if (!firstEventSeen) {
+            firstEventSeen = true
+            if (onFirstEvent && !onFirstEvent(eventType, data)) {
+              await reader.cancel().catch(() => {})
+              return
+            }
           }
+          enqueue(eventType, data)
+          eventType = ''
         }
-        applyEvent(eventType, data, aiIdRef.current)
-        eventType = ''
       }
     }
+  } finally {
+    flush()
   }
 }
