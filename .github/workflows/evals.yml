@@ -1,0 +1,67 @@
+name: agent-evals
+
+# Agent quality regression suite. Runs the live agent over app/ai/evals/cases.py
+# and scores answers with an LLM judge. Costs API tokens, so it runs nightly and
+# on manual dispatch — NOT on every PR. Requires the ANTHROPIC_API_KEY secret.
+
+on:
+  schedule:
+    - cron: "0 18 * * *"   # 01:00 Asia/Ho_Chi_Minh
+  workflow_dispatch:
+    inputs:
+      min_pass_rate:
+        description: "Fail the run below this pass rate (0..1)"
+        default: "0.7"
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wealthlog
+          POSTGRES_PASSWORD: wealthlog2026
+          POSTGRES_DB: wealthlog
+        ports: ["5433:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s
+          --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://wealthlog:wealthlog2026@localhost:5433/wealthlog
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Guard — require API key
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::warning::ANTHROPIC_API_KEY not set — skipping agent evals."
+            exit 0
+          fi
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install deps
+        run: uv sync --extra dev
+
+      - name: Apply migrations
+        run: uv run alembic upgrade head
+
+      - name: Run agent evals
+        run: |
+          uv run python -m app.ai.evals.run \
+            --min-pass-rate "${{ github.event.inputs.min_pass_rate || '0.7' }}" \
+            --out evals.json --history evals-history.jsonl
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: backend/evals.json

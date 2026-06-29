@@ -1,6 +1,6 @@
 'use client'
 
-import { Menu, Moon, Plus, Sparkles, Sun } from 'lucide-react'
+import { Menu, Moon, Plus, Sun } from 'lucide-react'
 import { usePathname } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { apiGet, queryKeys } from '@/lib/api'
@@ -25,11 +25,10 @@ const PAGE_TITLES: Record<string, string> = {
   '/investments': 'Investments',
   '/reports': 'Reports',
   '/settings': 'Settings',
-  '/chat': 'Chip Assistant',
 }
 
 export function Header() {
-  const { sidebarCollapsed, openAddTransaction, setMobileMenu, mobileMenuOpen, chatOpen, toggleChat } = useAppStore()
+  const { sidebarCollapsed, openAddTransaction, setMobileMenu, mobileMenuOpen } = useAppStore()
   const pathname = usePathname()
 
   const { data: settings } = useQuery<Settings>({
@@ -48,7 +47,7 @@ export function Header() {
   const pageTitle = PAGE_TITLES[pathname] || 'WealthLog'
 
   return (
-    <header className={cn('header', sidebarCollapsed && 'sidebar-collapsed', chatOpen && 'chat-open')}>
+    <header className={cn('header', sidebarCollapsed && 'sidebar-collapsed')}>
       <button
         onClick={() => setMobileMenu(!mobileMenuOpen)}
         className="btn-icon"
@@ -92,17 +91,6 @@ export function Header() {
           <Plus size={14} />
           <span className="header-btn-text">Add transaction</span>
         </button>
-
-        {!chatOpen && pathname !== '/chat' && (
-          <button
-            onClick={toggleChat}
-            className="chat-toggle-header"
-            title="AI assistant (Ctrl+/)"
-          >
-            <Sparkles size={15} />
-            <span className="header-btn-text">AI</span>
-          </button>
-        )}
       </div>
 
       <style jsx>{`

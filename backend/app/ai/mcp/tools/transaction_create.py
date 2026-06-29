@@ -12,6 +12,7 @@ from app.models.transaction import Transaction
 
 
 def register_create_tools(mcp: FastMCP) -> None:
+    @mcp.tool()
     async def create_transaction(
         type: str,
         amount: float,
@@ -28,7 +29,9 @@ def register_create_tools(mcp: FastMCP) -> None:
         BEFORE calling: confirm with the user that you have all three:
         1. description — what is this transaction for?
         2. category_name — which category? (check wealthlog://categories for exact names)
-        3. account_name — which wallet/account? (ask if user has multiple and didn't specify)
+        3. account_name — must be an EXACT existing account name. Call get_accounts
+           (or read wealthlog://accounts) and use the real name verbatim — do NOT
+           invent or prefix it (e.g. don't turn "Visa Debit" into "TCB Visa Debit").
         Do NOT guess these — ask the user if any is unclear.
 
         Parameters:
@@ -45,10 +48,13 @@ def register_create_tools(mcp: FastMCP) -> None:
         Example: user says "Spent 50k on lunch" →
             type="expense", amount=50000, description="Lunch", category_name="Food"
         """
+        # Raise (don't return an "Error:" string) on hard failures so the tool
+        # layer flags is_error — otherwise a deferred write reports success to
+        # the confirmation card while persisting nothing.
         if type not in _VALID_TYPES:
-            return f"Error: type must be one of {_VALID_TYPES}."
+            raise ValueError(f"type must be one of {_VALID_TYPES}.")
         if amount <= 0:
-            return "Error: amount must be greater than 0."
+            raise ValueError("amount must be greater than 0.")
 
         tx_date = date or today()
 
@@ -56,11 +62,14 @@ def register_create_tools(mcp: FastMCP) -> None:
             if account_name:
                 account_id = await resolve_account(db, account_name)
                 if not account_id:
-                    return f"Error: account '{account_name}' not found."
+                    raise ValueError(
+                        f"account '{account_name}' not found. Use an exact name "
+                        f"from wealthlog://accounts (call get_accounts to list them)."
+                    )
             else:
                 account_id = await get_default_account(db)
                 if not account_id:
-                    return "Error: no accounts exist yet. Create an account first."
+                    raise ValueError("no accounts exist yet. Create an account first.")
 
             category_id = None
             category_warning = ""
@@ -76,10 +85,10 @@ def register_create_tools(mcp: FastMCP) -> None:
             to_account_id = None
             if type == "transfer":
                 if not to_account_name:
-                    return "Error: transfer requires to_account_name."
+                    raise ValueError("transfer requires to_account_name.")
                 to_account_id = await resolve_account(db, to_account_name)
                 if not to_account_id:
-                    return f"Error: destination account '{to_account_name}' not found."
+                    raise ValueError(f"destination account '{to_account_name}' not found.")
 
             tx = Transaction(
                 type=type,
@@ -104,6 +113,7 @@ def register_create_tools(mcp: FastMCP) -> None:
                 f"{category_warning}"
             )
 
+    @mcp.tool()
     async def create_multiple_transactions(
         transactions: list[dict],
     ) -> str:
@@ -139,7 +149,7 @@ def register_create_tools(mcp: FastMCP) -> None:
         ]
         """
         if not transactions:
-            return "Error: empty transaction list."
+            raise ValueError("empty transaction list.")
 
         async with get_session() as db:
             default_account_id = await get_default_account(db)

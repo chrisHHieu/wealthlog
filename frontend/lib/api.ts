@@ -75,7 +75,6 @@ export const queryKeys = {
   budgetCheck: (categoryId: string, month: string) => ['budget-check', categoryId, month] as const,
   categories: (month?: string) => ['categories', month || 'all'] as const,
   dashboard: (period: string, month: string) => ['dashboard', period, month] as const,
-  digest: ['digest', 'latest'] as const,
   goals: ['goals'] as const,
   investments: ['investments'] as const,
   memoryFacts: ['memory-facts'] as const,

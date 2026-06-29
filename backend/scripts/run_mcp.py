@@ -8,29 +8,16 @@ Usage:
 import sys
 
 from app.ai.mcp.server import mcp
+from app.config import settings
 
 if __name__ == "__main__":
     if "--sse" in sys.argv:
-        from starlette.applications import Starlette
-        from starlette.middleware import Middleware
-        from starlette.middleware.cors import CORSMiddleware
-        from starlette.routing import Mount
-
-        # Wrap MCP SSE app inside a fresh Starlette app with CORS
-        sse_app = mcp.sse_app()
-        app = Starlette(
-            routes=[Mount("/", app=sse_app)],
-            middleware=[
-                Middleware(
-                    CORSMiddleware,
-                    allow_origins=["*"],
-                    allow_methods=["*"],
-                    allow_headers=["*"],
-                ),
-            ],
-        )
-
         import uvicorn
-        uvicorn.run(app, host="0.0.0.0", port=8002)
+
+        # Reuse the package entrypoint (CORS + bearer auth) so dev and the Docker
+        # service run the exact same app.
+        from app.ai.mcp.sse import build_sse_app
+
+        uvicorn.run(build_sse_app(), host=settings.mcp_host, port=settings.mcp_port)
     else:
         mcp.run()

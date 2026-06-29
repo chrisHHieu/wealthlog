@@ -14,6 +14,8 @@ dependencies = [
     "python-dateutil>=2.9.0",
     "mcp[cli]>=1.0.0",
     "anthropic>=0.52.0",
+    "opentelemetry-api>=1.42.1",
+    "opentelemetry-sdk>=1.42.1",
 ]
 
 [project.optional-dependencies]
@@ -38,8 +40,8 @@ ignore = ["UP042"]
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
-"app/ai/digest.py" = ["E501"]
 "app/ai/mcp/tools/reports.py" = ["E501"]
 "app/ai/mcp/tools/transactions.py" = ["E501"]
+"app/ai/mcp/tools/transaction_batch.py" = ["E501"]
 "app/services/seed.py" = ["E501"]
 "tests/**/*.py" = ["N801", "N805"]

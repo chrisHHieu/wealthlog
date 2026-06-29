@@ -1,8 +1,9 @@
 """User facts — long-term memory extracted from conversations."""
 
+import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, Boolean, DateTime, Integer, String, Text, func
+from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -40,8 +41,22 @@ class UserFact(Base, UUIDMixin):
     # saving for a house"). Internal-only — not surfaced in the prompt block.
     confidence: Mapped[int] = mapped_column(Integer, default=5, server_default="5")
     # 1-5 short tags in the same language as the fact (e.g., ["thu nhập", "lương"]).
-    # Used for topic-based retrieval boost in build_facts_prompt().
+    # Surfaced as #tags in the prompt so the agent can reason about what each
+    # fact relates to (facts are no longer reranked by topic — the whole set is
+    # injected). Also a grouping hint for the reviewer/consolidation passes.
     topics: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Bi-temporal supersession. A fact's value can change over time (income
+    # rises, a goal is revised). Instead of overwriting — which loses history —
+    # the reviewer retires the old row by stamping ``superseded_at`` and inserts
+    # a fresh row that points back via ``supersedes_id``. Retired rows are
+    # excluded from active retrieval but kept so the agent can reason about what
+    # changed ("income went from 15M to 20M"). NULL superseded_at = still valid.
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True,
+    )
+    supersedes_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("user_facts.id", ondelete="SET NULL"), nullable=True,
+    )
     # Usage stats — let frequently-surfaced facts bubble up among equals.
     access_count: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
     last_accessed_at: Mapped[datetime | None] = mapped_column(

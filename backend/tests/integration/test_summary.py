@@ -122,7 +122,7 @@ async def test_summarize_session_happy_path_upserts():
     with patch.object(summary_module, "settings") as s, \
          patch.object(summary_module, "_load_text_messages", AsyncMock(return_value=msgs)), \
          patch.object(summary_module, "_upsert_summary", upsert_mock), \
-         patch.object(summary_module.anthropic, "AsyncAnthropic", return_value=mock_client):
+         patch.object(summary_module, "get_client", return_value=mock_client):
         s.anthropic_api_key = "key"
         s.session_summary_model = "claude-haiku-4-5-20251001"
         assert await summary_module.summarize_session(sid) is True
@@ -153,7 +153,7 @@ async def test_summarize_session_skips_empty_summary():
     with patch.object(summary_module, "settings") as s, \
          patch.object(summary_module, "_load_text_messages", AsyncMock(return_value=msgs)), \
          patch.object(summary_module, "_upsert_summary", upsert_mock), \
-         patch.object(summary_module.anthropic, "AsyncAnthropic", return_value=mock_client):
+         patch.object(summary_module, "get_client", return_value=mock_client):
         s.anthropic_api_key = "key"
         s.session_summary_model = "claude-haiku-4-5-20251001"
         assert await summary_module.summarize_session(uuid.uuid4()) is False
@@ -181,7 +181,7 @@ async def test_summarize_session_tolerates_non_list_topics():
     with patch.object(summary_module, "settings") as s, \
          patch.object(summary_module, "_load_text_messages", AsyncMock(return_value=msgs)), \
          patch.object(summary_module, "_upsert_summary", upsert_mock), \
-         patch.object(summary_module.anthropic, "AsyncAnthropic", return_value=mock_client):
+         patch.object(summary_module, "get_client", return_value=mock_client):
         s.anthropic_api_key = "key"
         s.session_summary_model = "claude-haiku-4-5-20251001"
         await summary_module.summarize_session(uuid.uuid4())
@@ -240,6 +240,19 @@ def test_compute_expiry_context_default_fallback():
 
     assert out is not None
     assert (out - datetime.now(UTC)).days in (44, 45)
+
+
+def test_compute_expiry_emotion_default_ttl():
+    """Transient 'emotion' facts get a short default TTL (no explicit days)."""
+    from app.ai.memory import facts as memory_module
+
+    with patch.object(memory_module, "settings") as s:
+        s.user_fact_default_context_ttl_days = 90
+        s.user_fact_emotion_ttl_days = 30
+        out = memory_module._compute_expiry({}, "emotion")
+
+    assert out is not None
+    assert (out - datetime.now(UTC)).days in (29, 30)
 
 
 def test_compute_expiry_evergreen_categories_return_none():

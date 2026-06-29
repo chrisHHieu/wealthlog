@@ -4,13 +4,19 @@ import { motion, AnimatePresence } from 'framer-motion'
 import {
   ChevronDown, ChevronRight, Check, Copy, Brain, Wrench,
   MessageSquare, AlertCircle, RotateCcw, Sparkles,
+  ShieldAlert, X, Loader2, Globe, FileText,
 } from 'lucide-react'
 import { memo, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
+import { useQueryClient } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
+import { apiJson } from '@/lib/api'
 import { MarkdownMessage } from '@/components/chat/MarkdownMessage'
 import { useSmoothText } from '@/hooks/useSmoothText'
-import type { ChatMessage as ChatMessageType, ChatStep } from '@/types/chat'
+import {
+  citedFooterSources, collectWebSources, faviconUrl, linkifyCitations, type WebSource,
+} from '@/lib/webSources'
+import type { ActionStatus, ChatMessage as ChatMessageType, ChatStep } from '@/types/chat'
 
 const TOOL_LABELS: Record<string, string> = {
   // Reports
@@ -18,15 +24,16 @@ const TOOL_LABELS: Record<string, string> = {
   get_spending_trends:          'Analyze spending trends',
   get_top_expenses:             'View top expenses',
   get_upcoming_bills:           'Check upcoming bills',
-  get_monthly_digest:           'Read monthly digest',
   // Transactions
   search_transactions:          'Search transactions',
   get_spending_by_category:     'View spending by category',
   get_income_by_category:       'View income by category',
   create_transaction:           'Create transaction',
   create_multiple_transactions: 'Create multiple transactions',
-  update_transaction:           'Update transactions',
-  delete_transaction:           'Delete transactions',
+  update_transaction:           'Update transaction',
+  update_multiple_transactions: 'Update multiple transactions',
+  delete_transaction:           'Delete transaction',
+  delete_multiple_transactions: 'Delete multiple transactions',
   // Accounts
   get_accounts:                 'View accounts',
   get_account_summary:          'View account overview',
@@ -46,6 +53,30 @@ const TOOL_LABELS: Record<string, string> = {
   dismiss_commitment:           'Dismiss commitment',
   // Analytics
   query_database:               'Analyze data',
+  // Web
+  web_search:                   'Search the web',
+  web_extract:                  'Read web page',
+}
+
+/** Tool-specific icon for the timeline step header (default: Wrench). */
+function toolIcon(name: string) {
+  if (name === 'web_search') return Globe
+  if (name === 'web_extract') return FileText
+  return Wrench
+}
+
+/** Live, human label for a tool step — web tools surface their target inline. */
+function toolStepLabel(step: Extract<ChatStep, { kind: 'tool' }>): string {
+  const base = TOOL_LABELS[step.name] ?? step.name
+  if (step.name === 'web_search' && typeof step.input?.query === 'string') {
+    return `Searching “${step.input.query}”`
+  }
+  if (step.name === 'web_extract' && typeof step.input?.url === 'string') {
+    try {
+      return `Reading ${new URL(step.input.url).hostname.replace(/^www\./, '')}`
+    } catch { /* fall through to base label */ }
+  }
+  return base
 }
 
 function formatSeconds(ms: number): string {
@@ -130,8 +161,21 @@ export const ChatMessage = memo(function ChatMessage({ message, onRetry }: Props
   // Plain content without steps: error replies and legacy persisted messages
   const fallbackContent = steps.length === 0 && !message.isStreaming ? message.content : null
 
+  // Deferred financial writes that need explicit user sign-off, surfaced as
+  // prominent cards (never buried inside the collapsed work trail).
+  const confirmSteps = steps.filter(
+    (s): s is Extract<ChatStep, { kind: 'tool' }> => s.kind === 'tool' && !!s.pendingActionId,
+  )
+
   // Show pending dots only before ANY event has arrived (no content, no steps).
   const showPendingDots = message.isStreaming && steps.length === 0 && !message.content
+
+  // Web sources cited across the whole message — power inline [n] chips + footer.
+  const webSources = collectWebSources(steps)
+  // The footer shows only the sources the answer actually cites (not every raw
+  // search hit), so it matches the inline chips.
+  const answerText = finalAnswer?.content ?? fallbackContent ?? ''
+  const footerSources = citedFooterSources(answerText, webSources)
 
   return (
     <motion.div
@@ -160,14 +204,23 @@ export const ChatMessage = memo(function ChatMessage({ message, onRetry }: Props
 
         {/* Final answer — smooth-revealed, block-memoized markdown */}
         {finalAnswer && finalAnswer.kind === 'text' && (
-          <FinalAnswer step={finalAnswer} />
+          <FinalAnswer step={finalAnswer} sources={webSources} />
         )}
 
         {fallbackContent && (
           <div className="chat-md">
-            <MarkdownMessage content={fallbackContent} />
+            <MarkdownMessage content={linkifyCitations(fallbackContent, webSources)} />
           </div>
         )}
+
+        {/* Sources footer — clickable cards for the sources the answer cited */}
+        {!message.isStreaming && footerSources.length > 0 && (
+          <Sources sources={footerSources} />
+        )}
+
+        {confirmSteps.map(step => (
+          <PendingActionCard key={step.id} step={step} />
+        ))}
 
         {!message.isStreaming && (finalAnswer?.content || fallbackContent) && (
           <MessageActions
@@ -182,18 +235,72 @@ export const ChatMessage = memo(function ChatMessage({ message, onRetry }: Props
 })
 
 /** Final assistant answer: smooth character reveal + memoized markdown blocks. */
-function FinalAnswer({ step }: { step: Extract<ChatStep, { kind: 'text' }> }) {
+function FinalAnswer({ step, sources }: {
+  step: Extract<ChatStep, { kind: 'text' }>
+  sources: WebSource[]
+}) {
   const smooth = useSmoothText(step.content, !!step.streaming)
+  const content = linkifyCitations(smooth, sources)
 
   return (
     <div className={cn('chat-md', step.streaming && 'chat-md--live')}>
-      {smooth ? (
-        <MarkdownMessage content={smooth} />
+      {content ? (
+        <MarkdownMessage content={content} />
       ) : (
         <div className="chat-inline-dots" aria-label="Processing">
           <span /><span /><span />
         </div>
       )}
+    </div>
+  )
+}
+
+/** One web source as a favicon + title + domain card linking out in a new tab. */
+function SourceCard({ source, index }: { source: WebSource; index: number }) {
+  const [iconFailed, setIconFailed] = useState(false)
+  return (
+    <a
+      className="chat-source-card"
+      href={source.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={source.title}
+    >
+      <span className="chat-source-index">{index}</span>
+      {iconFailed ? (
+        <Globe size={13} className="chat-source-favicon-fallback" />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className="chat-source-favicon"
+          src={faviconUrl(source.domain)}
+          alt=""
+          width={14}
+          height={14}
+          onError={() => setIconFailed(true)}
+        />
+      )}
+      <span className="chat-source-text">
+        <span className="chat-source-title">{source.title}</span>
+        <span className="chat-source-domain">{source.domain}</span>
+      </span>
+    </a>
+  )
+}
+
+/** "Sources" section under the answer — one card per cited web source. */
+function Sources({ sources }: { sources: WebSource[] }) {
+  return (
+    <div className="chat-sources">
+      <div className="chat-sources-head">
+        <Globe size={11} />
+        <span>Sources</span>
+      </div>
+      <div className="chat-sources-list">
+        {sources.map((source, i) => (
+          <SourceCard key={source.url} source={source} index={source.num ?? i + 1} />
+        ))}
+      </div>
     </div>
   )
 }
@@ -220,6 +327,155 @@ function MessageActions({ content, error, onRetry }: { content: string; error?: 
           <RotateCcw size={12} />
           <span>Retry</span>
         </button>
+      )}
+    </div>
+  )
+}
+
+const ACTION_STATUS_LABELS: Record<ActionStatus, string> = {
+  pending: '',
+  executed: 'Confirmed',
+  rejected: 'Rejected',
+  failed: 'Failed',
+}
+
+function formatParamValue(key: string, value: unknown): string {
+  if (key === 'amount' && (typeof value === 'number' || typeof value === 'string')) {
+    const n = Number(value)
+    if (Number.isFinite(n)) return `${n.toLocaleString('en-US')} VND`
+  }
+  return typeof value === 'object' ? JSON.stringify(value) : String(value)
+}
+
+/**
+ * Confirmation card for a financial write the agent deferred. Mirrors Claude
+ * Code's permission prompt: show the action + its inputs, then Confirm / Reject.
+ * The write only runs when the user confirms (POST .../confirm); rejecting
+ * discards it. Self-contained — resolves via the API and tracks its own state.
+ */
+// Query families to refresh after a write actually lands, so other views
+// (transactions list, dashboard, accounts) reflect it without a manual reload.
+const INVALIDATE_ON_WRITE = ['transactions', 'dashboard', 'accounts', 'reports', 'budgets']
+
+function ConfirmItem({ item }: { item: { label: string; detail?: string } }) {
+  return (
+    <div className="chat-confirm-item">
+      <span className="chat-confirm-item-label">{item.label}</span>
+      {item.detail && <span className="chat-confirm-item-detail">{item.detail}</span>}
+    </div>
+  )
+}
+
+function PendingActionCard({ step }: { step: Extract<ChatStep, { kind: 'tool' }> }) {
+  const [status, setStatus] = useState<ActionStatus>(step.actionStatus ?? 'pending')
+  const [busy, setBusy] = useState<null | 'confirm' | 'reject'>(null)
+  const [receipt, setReceipt] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
+  const queryClient = useQueryClient()
+  const label = TOOL_LABELS[step.name] ?? step.name
+  const input = step.input || {}
+  const preview = step.preview
+  const pending = status === 'pending'
+
+  const resolve = async (action: 'confirm' | 'reject') => {
+    if (busy) return
+    setBusy(action)
+    try {
+      const res = await apiJson<{ ok: boolean; result?: string }>(
+        `/api/chat/actions/${step.pendingActionId}/${action}`,
+        { method: 'POST' },
+      )
+      const next: ActionStatus = action === 'confirm' ? (res.ok ? 'executed' : 'failed') : 'rejected'
+      setStatus(next)
+      setReceipt(res.result ?? null)
+      // Only refresh data when the write truly succeeded.
+      if (next === 'executed') {
+        INVALIDATE_ON_WRITE.forEach(key => queryClient.invalidateQueries({ queryKey: [key] }))
+      }
+    } catch {
+      // 409 (already resolved) or network error — clear the stale prompt; the
+      // reload path reconciles the true status from the server.
+      setStatus(action === 'confirm' ? 'failed' : 'rejected')
+    } finally {
+      setBusy(null)
+    }
+  }
+
+  const failed = status === 'failed'
+
+  return (
+    <div className={cn('chat-confirm', `chat-confirm--${status}`)}>
+      <div className="chat-confirm-head">
+        <ShieldAlert size={14} className="chat-confirm-icon" />
+        <span className="chat-confirm-title">{label}</span>
+        {!pending && <span className="chat-confirm-badge">{ACTION_STATUS_LABELS[status]}</span>}
+      </div>
+
+      {pending && (
+        <p className="chat-confirm-note">Review and confirm before this is saved.</p>
+      )}
+
+      {preview ? (
+        <div className="chat-confirm-preview">
+          <p className="chat-confirm-summary">{preview.summary}</p>
+          {preview.items.length === 1 ? (
+            <ConfirmItem item={preview.items[0]} />
+          ) : preview.items.length > 1 && (
+            <>
+              <button
+                type="button"
+                className="chat-confirm-toggle"
+                onClick={() => setExpanded(e => !e)}
+              >
+                {expanded ? 'Hide details' : `Show ${preview.items.length} transactions`}
+              </button>
+              {expanded && (
+                <div className="chat-confirm-items">
+                  {preview.items.map((it, i) => <ConfirmItem key={i} item={it} />)}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      ) : Object.keys(input).length > 0 && (
+        <div className="chat-confirm-params">
+          {Object.entries(input).map(([k, v]) => (
+            <div key={k} className="chat-confirm-row">
+              <span className="chat-confirm-key">{k}</span>
+              <span className={cn('chat-confirm-val', k === 'amount' && 'chat-confirm-val--amount')}>
+                {formatParamValue(k, v)}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Action receipt: the real tool outcome (created row / error), not just a badge. */}
+      {receipt && (
+        <p className={cn('chat-confirm-receipt', failed && 'chat-confirm-receipt--error')}>
+          {receipt}
+        </p>
+      )}
+
+      {pending && (
+        <div className="chat-confirm-actions">
+          <button
+            className="chat-confirm-btn chat-confirm-btn--reject"
+            onClick={() => resolve('reject')}
+            disabled={!!busy}
+          >
+            {busy === 'reject' ? <Loader2 size={13} className="chat-confirm-spin" /> : <X size={13} />}
+            <span>Reject</span>
+          </button>
+          <button
+            className="chat-confirm-btn chat-confirm-btn--confirm"
+            onClick={() => resolve('confirm')}
+            disabled={!!busy}
+          >
+            {busy === 'confirm' ? <Loader2 size={13} className="chat-confirm-spin" /> : <Check size={13} />}
+            <span>Confirm</span>
+          </button>
+        </div>
       )}
     </div>
   )
@@ -359,9 +615,12 @@ function TimelineStep({ step, live }: { step: ChatStep; live: boolean }) {
   const hasInput = !!step.input && Object.keys(step.input).length > 0
   const hasResult = step.status === 'done' && !!step.result
   const canExpand = hasInput || hasResult
-  const label = TOOL_LABELS[step.name] ?? step.name
+  const label = toolStepLabel(step)
   const isError = step.status === 'error'
   const isRunning = step.status === 'running'
+  const StepIcon = toolIcon(step.name)
+  // Web tools: render the result as clickable source rows, not a raw text dump.
+  const stepSources = hasResult ? collectWebSources([step]) : []
 
   return (
     <div className={cn('chat-step chat-step-tool', isRunning && 'chat-step--running')}>
@@ -389,7 +648,7 @@ function TimelineStep({ step, live }: { step: ChatStep; live: boolean }) {
           disabled={!canExpand}
         >
           {canExpand && (expanded ? <ChevronDown size={11} /> : <ChevronRight size={11} />)}
-          <Wrench size={11} className="chat-step-icon" />
+          <StepIcon size={11} className="chat-step-icon" />
           <span className={cn('chat-step-label', isRunning && 'chat-shimmer-text')}>{label}</span>
         </button>
         <AnimatePresence initial={false}>
@@ -421,9 +680,17 @@ function TimelineStep({ step, live }: { step: ChatStep; live: boolean }) {
               {hasResult && (
                 <>
                   <div className="chat-step-observation-label" style={{ marginTop: hasInput ? 'var(--space-3)' : 0 }}>
-                    <span>Result</span>
+                    <span>{stepSources.length > 0 ? 'Sources' : 'Result'}</span>
                   </div>
-                  <pre className="chat-step-result">{step.result}</pre>
+                  {stepSources.length > 0 ? (
+                    <div className="chat-step-sources">
+                      {stepSources.map((source, i) => (
+                        <SourceCard key={source.url} source={source} index={source.num ?? i + 1} />
+                      ))}
+                    </div>
+                  ) : (
+                    <pre className="chat-step-result">{step.result}</pre>
+                  )}
                 </>
               )}
             </motion.div>

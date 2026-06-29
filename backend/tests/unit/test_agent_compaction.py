@@ -9,6 +9,7 @@ from app.ai.agent.compaction import (
     _is_assistant_final,
     _prepend_truncation_note,
     _split_turns,
+    _truncate_tool_result,
     _turn_size_chars,
 )
 
@@ -131,6 +132,20 @@ def test_compact_results_truncates_oversized():
     content = out[0]["content"][0]["content"]
     assert len(content) < 400
     assert "truncated" in content
+
+
+def test_truncate_keeps_head_and_tail():
+    """A summary line at the END (e.g. a total) must survive truncation."""
+    text = "HEAD-MARKER\n" + ("x" * 5000) + "\nPortfolio total: 100,000 VND"
+    out = _truncate_tool_result(text, max_chars=400)
+    assert "HEAD-MARKER" in out                       # head kept
+    assert "Portfolio total: 100,000 VND" in out      # tail kept
+    assert "truncated" in out
+    assert len(out) <= 400
+
+
+def test_truncate_passes_short_text_through():
+    assert _truncate_tool_result("small result", max_chars=400) == "small result"
 
 
 def test_compact_results_preserves_small():

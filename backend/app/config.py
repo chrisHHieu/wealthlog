@@ -16,6 +16,12 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://wealthlog:wealthlog2026@localhost:5433/wealthlog"
     db_pool_size: int = 10
     db_max_overflow: int = 20
+    # Proactively retire connections older than this (seconds). Cloud
+    # infra (NAT gateways, managed-DB proxies, load balancers) silently drops
+    # idle TCP connections; recycling below their idle timeout turns "server
+    # closed the connection unexpectedly" into a non-event. pool_pre_ping is
+    # the reactive complement. Default 1800s (30 min) sits under most defaults.
+    db_pool_recycle: int = 1800
 
     # ── CORS ─────────────────────────────────────────────────────────────────
     cors_origins: list[str] = ["http://localhost:3001"]
@@ -24,12 +30,17 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     # DeepSeek API key — nếu set, DeepSeek models sẽ xuất hiện trong UI model picker.
     deepseek_api_key: str = ""
+    # Tavily web-search API key — nếu set, the agent gains web_search + web_extract
+    # tools (live market prices, rates, news, reading a pasted URL). Cross-provider:
+    # plain MCP tools, so every model (Claude, DeepSeek, …) can call them. When
+    # empty the tools are simply not registered and the agent never sees them.
+    tavily_api_key: str = ""
     # Sonnet for the main agent — it reasons across user model, facts, and tool
     # results in a single turn, so model quality directly affects advice depth.
     agent_model: str = "claude-sonnet-4-6"
-    agent_max_tokens: int = 12000
+    agent_max_tokens: int = 16000
     agent_thinking_enabled: bool = True
-    # thinking_budget must be < max_tokens; 8k reasoning leaves ~4k for text output.
+    # thinking_budget must be < max_tokens; 8k reasoning leaves ~8k for text output.
     agent_thinking_budget: int = 8000
 
     # ── Short-term memory (in-session compaction) ────────────────────────────
@@ -41,21 +52,46 @@ class Settings(BaseSettings):
     # grounding). `max_input_tokens` is the pre-send budget: when the token
     # count exceeds it, the runner recompacts the raw history with a tighter
     # window (half the turns, recent window capped at 2) before sending.
-    agent_max_turns_in_context: int = 20
-    agent_keep_recent_turns: int = 3
-    agent_tool_result_max_chars: int = 3000
-    agent_old_turn_tool_result_chars: int = 600
-    agent_recent_turn_max_chars: int = 20_000
-    agent_max_input_tokens: int = 150_000
+    agent_max_turns_in_context: int = 40
+    agent_keep_recent_turns: int = 6
+    # Generous safety cap on a FRESH tool result (this turn). Tools already bound
+    # their own output (LIMIT, top_n), so this rarely triggers — it only guards a
+    # pathological dump. Kept high on purpose: the model needs the full result to
+    # reason THIS turn ("fresh full"); shrinking happens later in history
+    # compaction ("old compressed"), not on the live result. Set generously since
+    # modern models have large context windows — web_extract/search benefit most.
+    agent_tool_result_max_chars: int = 32_000
+    agent_old_turn_tool_result_chars: int = 2_000
+    # Per-turn ceiling for the recent window; sized above a couple of full-size
+    # tool results so a multi-tool turn isn't squeezed before history compaction.
+    agent_recent_turn_max_chars: int = 96_000
+    # Pre-send INPUT cost cap (every input token is billed each turn). Our main
+    # models hold ~1M tokens, so this is a deliberate cost/latency throttle, not a
+    # technical limit — raise toward the window (≤~1M) to keep longer sessions
+    # uncompacted; prompt caching makes the extra context mostly cheap cache reads.
+    agent_max_input_tokens: int = 512_000
+
+    # Financial write tools (create/update/delete transactions) are gated behind
+    # explicit user confirmation: the agent's call is persisted as a pending
+    # action and only executes when the user confirms it via the API. Set False
+    # to let the agent write directly (not recommended for a money app).
+    agent_require_write_confirmation: bool = True
 
     # ── Long-term memory (facts extraction) ──────────────────────────────────
     agent_review_cadence: int = 6
+    # Output budget for ALL background memory LLM tasks (review, consolidation,
+    # dreaming, synthesis, session summary). These run on the structured model,
+    # which may be a REASONING model (e.g. DeepSeek) that spends part of the
+    # budget on hidden thinking — set too low and the JSON output gets truncated
+    # to empty and the task silently no-ops. They're background + infrequent, so a
+    # generous ceiling costs little. (Foreground chat output uses agent_max_tokens.)
+    memory_task_max_tokens: int = 16_000
     user_fact_default_context_ttl_days: int = 90
-    # Trigram similarity threshold for save_user_fact() dedup. 0.85 is high
-    # enough to avoid collapsing genuinely distinct facts, low enough to catch
-    # paraphrases the reviewer emits across sessions. Postgres-only; SQLite
-    # falls back to exact-match equality.
-    user_fact_dedup_similarity_threshold: float = 0.85
+    # Transient categories (emotions, passing deliberations) default to a SHORT
+    # TTL so a mood logged once doesn't persist as fact forever. The reviewer
+    # can still override per-fact via 'expires_in_days'. Once expired, the daily
+    # dreaming pass resolves the fact with its real outcome or drops it.
+    user_fact_emotion_ttl_days: int = 30
     # When the non-expired fact count crosses this, the post-review pipeline
     # asks Haiku to merge overlapping rows via 'replace' actions. Capped to
     # bound prompt size: more facts = more tokens to inject every turn.
@@ -79,6 +115,21 @@ class Settings(BaseSettings):
     # ── MCP server (stdio/SSE entry point for external clients) ──────────────
     mcp_host: str = "0.0.0.0"
     mcp_port: int = 8002
+    # Bearer token the SSE MCP server requires (and the agent sends). Empty =
+    # no auth (dev/local only). Set in BOTH the mcp server and the agent.
+    mcp_auth_token: str = ""
+
+    # ── MCP client (the agent as an MCP Host) ────────────────────────────────
+    # When set, the agent connects to this MCP server over SSE (the wire) instead
+    # of the in-process server — the seam toward splitting Chip into its own
+    # service. Empty = in-process (default). e.g. "http://mcp:8002/sse".
+    mcp_server_url: str = ""
+
+    # ── Observability ────────────────────────────────────────────────────────
+    # Opt-in OpenTelemetry tracing of the agent loop (spans per LLM call + tool).
+    # Off by default; when on, exports via OTLP if OTEL_EXPORTER_OTLP_ENDPOINT is
+    # set, otherwise to the console.
+    otel_enabled: bool = False
 
     # ── App ──────────────────────────────────────────────────────────────────
     debug: bool = Field(

@@ -1,7 +1,7 @@
 ﻿"""Search and aggregation MCP tools for transactions."""
 
 from mcp.server.fastmcp import FastMCP
-from sqlalchemy import and_, func, select
+from sqlalchemy import and_, func, or_, select
 
 from app.ai.mcp.tools.transaction_constants import TYPE_LABELS as _TYPE_LABELS
 from app.ai.mcp.tools.transaction_constants import VALID_TYPES as _VALID_TYPES
@@ -12,6 +12,7 @@ from app.models.transaction import Transaction
 
 
 def register_search_tools(mcp: FastMCP) -> None:
+    @mcp.tool()
     async def search_transactions(
         start_date: str | None = None,
         end_date: str | None = None,
@@ -21,12 +22,18 @@ def register_search_tools(mcp: FastMCP) -> None:
         limit: int = 20,
     ) -> str:
         """Search transactions by date range, type (income/expense/transfer),
-        category name, or keyword. Date format: YYYY-MM-DD. Default: latest 20."""
+        category name, or keyword. `keyword` matches the description OR the
+        category name. Date format: YYYY-MM-DD. Default: latest 20.
+
+        Each result includes its `id` — pass that exact id to update_transaction /
+        update_multiple_transactions / delete_transaction to edit or remove it.
+        Never invent an id; always take it from a search/lookup result."""
         if type is not None and type not in _VALID_TYPES:
             return f"Error: type must be one of {_VALID_TYPES}."
         async with get_session() as db:
             stmt = (
                 select(
+                    Transaction.id,
                     Transaction.type,
                     Transaction.amount,
                     Transaction.description,
@@ -46,7 +53,15 @@ def register_search_tools(mcp: FastMCP) -> None:
             if category_name:
                 conditions.append(Category.name.ilike(f"%{category_name}%"))
             if keyword:
-                conditions.append(Transaction.description.ilike(f"%{keyword}%"))
+                # Match the word in the free-text description OR the category name,
+                # so "fuel" finds a "Transportation" txn even if its description
+                # doesn't contain the word.
+                conditions.append(
+                    or_(
+                        Transaction.description.ilike(f"%{keyword}%"),
+                        Category.name.ilike(f"%{keyword}%"),
+                    )
+                )
             if conditions:
                 stmt = stmt.where(and_(*conditions))
 
@@ -62,7 +77,9 @@ def register_search_tools(mcp: FastMCP) -> None:
                 t = _TYPE_LABELS.get(r.type, r.type)
                 cat = f"{r.cat_icon} {r.cat_name}" if r.cat_name else "Uncategorized"
                 desc = r.description or ""
-                lines.append(f"- [{r.date}] {t}: {r.amount:,.0f} VND | {cat} | {desc}")
+                lines.append(
+                    f"- [{r.date}] {t}: {r.amount:,.0f} VND | {cat} | {desc} (id: {r.id})"
+                )
 
             if len(rows) == effective_limit:
                 lines.append(

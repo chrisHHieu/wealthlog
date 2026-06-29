@@ -173,11 +173,12 @@ async def test_facts_from_session_a_appear_in_session_b_prompt(db: AsyncSession)
     assert "(Habit)" in facts_prompt
 
 
-async def test_build_system_blocks_splits_stable_and_dynamic(db: AsyncSession):
-    """System prompt splits into a cached stable block + uncached dynamic block.
+async def test_build_system_blocks_splits_stable_facts_and_dynamic(db: AsyncSession):
+    """System prompt layers into: cached stable, cached facts, uncached dynamic.
 
-    Facts and the timestamp must land in the uncached block so a new fact
-    doesn't bust the schema/resources cache.
+    Facts get their OWN cache breakpoint (after the schema cache) so the whole
+    active set can be injected cheaply and a new fact busts only the facts
+    prefix — never the rules/schema cache. The timestamp stays uncached.
     """
     from app.ai.agent.prompt import build_system_blocks
 
@@ -191,20 +192,65 @@ async def test_build_system_blocks_splits_stable_and_dynamic(db: AsyncSession):
 
         blocks = await build_system_blocks()
 
-    assert len(blocks) == 2
-    stable, dynamic = blocks
+    # No UserModel synthesized → stable + facts + dynamic.
+    assert len(blocks) == 3
+    stable, facts, dynamic = blocks
 
     assert stable["cache_control"] == {"type": "ephemeral"}
     assert "You are Chip" in stable["text"]
-    # Dynamic content must NOT leak into the cached block.
-    assert "Current time" not in stable["text"]
+    # Volatile + fact content must NOT leak into the cached stable block. The
+    # timestamp line is "Current time: <value>" — match the colon so the rules'
+    # reference to the "Current time" concept doesn't trip a false positive.
+    assert "Current time:" not in stable["text"]
     assert "Thu nhập 30 triệu" not in stable["text"]
 
+    # Facts live in their own cached block.
+    assert facts["cache_control"] == {"type": "ephemeral"}
+    assert "[Known facts about the user]" in facts["text"]
+    assert "Thu nhập 30 triệu" in facts["text"]
+    assert "Đầu tư chứng khoán" in facts["text"]
+
+    # Dynamic block: uncached, timestamp only — no facts.
     assert "cache_control" not in dynamic
     assert "Current time" in dynamic["text"]
-    assert "Thu nhập 30 triệu" in dynamic["text"]
-    assert "Đầu tư chứng khoán" in dynamic["text"]
-    assert "[Known facts about the user]" in dynamic["text"]
+    assert "Thu nhập 30 triệu" not in dynamic["text"]
+    assert "[Known facts about the user]" not in dynamic["text"]
+
+
+async def test_build_system_blocks_omits_facts_block_when_empty(db: AsyncSession):
+    """No facts → no facts block; just stable + dynamic."""
+    from app.ai.agent.prompt import build_system_blocks
+
+    with _patch_get_session(db), \
+         patch("app.ai.agent.prompt.mcp") as mock_mcp:
+        mock_mcp.read_resource = AsyncMock(return_value=[])
+
+        blocks = await build_system_blocks()
+
+    assert len(blocks) == 2  # stable + dynamic only
+    assert all("[Known facts about the user]" not in b["text"] for b in blocks)
+
+
+async def test_facts_block_is_stable_regardless_of_query(db: AsyncSession):
+    """The facts block must not be reranked per-message — identical content
+    turn-to-turn is what lets its cache breakpoint hold."""
+    from app.ai.agent.prompt import build_system_blocks
+
+    db.add(UserFact(fact="Ngân sách ăn uống 5 triệu", category="context", importance=6))
+    db.add(UserFact(fact="Đầu tư chứng khoán dài hạn", category="preference", importance=6))
+    await db.flush()
+
+    with _patch_get_session(db), \
+         patch("app.ai.agent.prompt.mcp") as mock_mcp:
+        mock_mcp.read_resource = AsyncMock(return_value=[])
+
+        blocks_food = await build_system_blocks(latest_user_message="cho tôi xem ngân sách ăn uống")
+        blocks_invest = await build_system_blocks(latest_user_message="danh mục đầu tư thế nào")
+
+    marker = "[Known facts about the user]"
+    facts_food = next(b["text"] for b in blocks_food if marker in b["text"])
+    facts_invest = next(b["text"] for b in blocks_invest if marker in b["text"])
+    assert facts_food == facts_invest  # query must not reorder/filter the set
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -243,7 +289,7 @@ async def test_background_review_full_flow(db: AsyncSession):
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"
@@ -285,7 +331,7 @@ async def test_background_review_across_sessions(db: AsyncSession):
     mock_client1.messages.create = AsyncMock(return_value=response1)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client1), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client1), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = "key"
         s.agent_review_model = "claude-haiku-4-5-20251001"
@@ -311,7 +357,7 @@ async def test_background_review_across_sessions(db: AsyncSession):
     mock_client2.messages.create = AsyncMock(return_value=response2)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client2), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client2), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = "key"
         s.agent_review_model = "claude-haiku-4-5-20251001"

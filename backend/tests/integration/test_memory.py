@@ -204,7 +204,7 @@ async def test_run_review_extracts_and_saves_facts(db: AsyncSession):
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"
@@ -242,7 +242,7 @@ async def test_run_review_skips_existing_facts(db: AsyncSession):
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"
@@ -269,7 +269,7 @@ async def test_run_review_handles_empty_response(db: AsyncSession):
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"
@@ -298,7 +298,7 @@ async def test_run_review_handles_markdown_wrapped_json(db: AsyncSession):
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"
@@ -328,7 +328,7 @@ async def test_run_review_invalid_category_defaults_to_general(db: AsyncSession)
     mock_client.messages.create = AsyncMock(return_value=mock_response)
 
     with _patch_get_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=mock_client), \
+         patch("app.ai.memory.facts.client_factory", return_value=mock_client), \
          patch("app.ai.memory.facts.settings") as mock_settings:
         mock_settings.anthropic_api_key = "test-key"
         mock_settings.agent_review_model = "claude-haiku-4-5-20251001"

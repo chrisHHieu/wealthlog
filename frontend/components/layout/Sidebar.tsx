@@ -13,7 +13,6 @@ import {
   PiggyBank,
   Repeat,
   Settings,
-  Sparkles,
   Sun,
   Target,
   TrendingUp,
@@ -31,7 +30,6 @@ const NAV_ITEMS = [
   { href: '/goals', icon: Target, label: 'Goals' },
   { href: '/investments', icon: TrendingUp, label: 'Investments' },
   { href: '/reports', icon: BarChart2, label: 'Reports' },
-  { href: '/chat', icon: Sparkles, label: 'Chip Assistant' },
 ]
 
 export function Sidebar() {

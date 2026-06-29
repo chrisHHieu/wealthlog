@@ -61,15 +61,16 @@ def test_emits_adjacent_bigrams():
     assert "kế hoạch" in out
 
 
-def test_expands_english_alias_to_canonical():
-    """English query must reach canonical Vietnamese topics written by the fact path."""
+def test_passes_through_any_domain_verbatim():
+    """Topics are free-form across every domain — no finance canonicalization."""
+    out = _extract_query_topics("học guitar và tập gym tuần này")
+    assert "guitar" in out
+    assert "gym" in out
+    assert "học guitar" in out  # bigram for two-word stored topics
+
+
+def test_no_finance_alias_expansion():
+    """The old finance alias bridge is gone: 'salary' must NOT become 'thu nhập'."""
     out = _extract_query_topics("how is my salary doing")
-    assert "thu nhập" in out  # whole phrase — for the ?| element match
-    assert "thu" in out  # words — for the word-level overlap scorer
-    assert "nhập" in out
-
-
-def test_expands_vietnamese_colloquial_alias():
-    """'lương' is stored canonically as 'thu nhập'; the query side must follow."""
-    out = _extract_query_topics("lương tháng này")
-    assert "thu nhập" in out
+    assert "salary" in out  # surface token survives
+    assert "thu nhập" not in out  # no subject-specific expansion anymore

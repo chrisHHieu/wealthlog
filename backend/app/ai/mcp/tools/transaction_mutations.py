@@ -28,35 +28,38 @@ def register_mutation_tools(mcp: FastMCP) -> None:
         - transaction_id: UUID of the transaction
         - Other fields: same as create_transaction; only pass what changes.
         """
+        # Raise (don't return an "Error:" string) on hard failures so the tool
+        # layer flags is_error — otherwise a deferred write reports success to
+        # the confirmation card while persisting nothing.
         try:
             tx_uuid = UUID(transaction_id)
         except ValueError:
-            return "Error: transaction_id is not a valid UUID."
+            raise ValueError("transaction_id is not a valid UUID.") from None
 
         async with get_session() as db:
             tx = await db.get(Transaction, tx_uuid)
             if not tx:
-                return f"Error: transaction {transaction_id} not found."
+                raise ValueError(f"transaction {transaction_id} not found.")
 
             # Validate + resolve everything BEFORE touching balance — otherwise
             # a failed validation after reverse_balance leaves the account
             # balance out of sync with the (still-existing) transaction.
             if type is not None and type not in _VALID_TYPES:
-                return f"Error: type must be one of {_VALID_TYPES}."
+                raise ValueError(f"type must be one of {_VALID_TYPES}.")
             if amount is not None and amount <= 0:
-                return "Error: amount must be > 0."
+                raise ValueError("amount must be > 0.")
 
             new_account_id = None
             if account_name is not None:
                 new_account_id = await resolve_account(db, account_name)
                 if not new_account_id:
-                    return f"Error: account '{account_name}' not found."
+                    raise ValueError(f"account '{account_name}' not found.")
 
             new_to_account_id = None
             if to_account_name is not None:
                 new_to_account_id = await resolve_account(db, to_account_name)
                 if not new_to_account_id:
-                    return f"Error: destination account '{to_account_name}' not found."
+                    raise ValueError(f"destination account '{to_account_name}' not found.")
 
             new_category_id = None
             category_warning = ""
@@ -104,15 +107,17 @@ def register_mutation_tools(mcp: FastMCP) -> None:
         automatically restored.
         - transaction_id: UUID of the transaction.
         """
+        # Raise on hard failures so the confirmation card reflects reality
+        # (is_error) instead of showing a deleted row that never existed.
         try:
             tx_uuid = UUID(transaction_id)
         except ValueError:
-            return "Error: transaction_id is not a valid UUID."
+            raise ValueError("transaction_id is not a valid UUID.") from None
 
         async with get_session() as db:
             tx = await db.get(Transaction, tx_uuid)
             if not tx:
-                return f"Error: transaction {transaction_id} not found."
+                raise ValueError(f"transaction {transaction_id} not found.")
 
             tx_type = tx.type.value if hasattr(tx.type, "value") else tx.type
             await reverse_balance(db, tx_type, tx.amount, tx.account_id, tx.to_account_id)

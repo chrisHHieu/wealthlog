@@ -1,29 +1,23 @@
-import asyncio
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from time import perf_counter
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.memory.decay import purge_expired_facts, sunset_stale_facts
-from app.ai.memory.dreaming import run_dreaming_pass
 from app.config import settings
-from app.database import async_session
+from app.database import async_session, get_db
 from app.logging_config import get_logger, reset_request_id, set_request_id, setup_logging
 from app.routers import (
     accounts,
     budgets,
     categories,
-    chat,
-    chat_sessions,
     dashboard,
-    digest,
     goals,
     investments,
-    memory,
-    onboard,
     recurring,
     reports,
     transactions,
@@ -54,34 +48,13 @@ def _run_migrations() -> None:
         logger.info("Alembic: %s", line)
 
 
-async def _memory_maintenance_loop() -> None:
-    """Daily memory upkeep: sunset stale facts, dream over expired ones, purge.
-
-    Staleness itself is priced into ranking at read time (lazy decay in
-    fact_scoring.effective_importance) — this loop only runs the destructive
-    tail. Order matters — the dreaming pass rewrites expired facts into
-    past-tense outcome facts, so it must run before the purge deletes them.
-    """
-    while True:
-        await asyncio.sleep(24 * 60 * 60)
-        try:
-            await sunset_stale_facts()
-        except Exception:
-            logger.exception("Scheduled fact sunset failed")
-        try:
-            await run_dreaming_pass()
-        except Exception:
-            logger.exception("Scheduled dreaming pass failed")
-        try:
-            await purge_expired_facts()
-        except Exception:
-            logger.exception("Scheduled fact purge failed")
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """Startup and shutdown events."""
     setup_logging()
+    from app.ai.tracing import setup_tracing
+
+    setup_tracing()
     logger.info("Starting %s", settings.app_name)
     logger.info("Debug mode: %s", settings.debug)
     logger.info("Database: %s", _mask_db_url(settings.database_url))
@@ -92,8 +65,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     async with async_session() as session:
         await seed(session)
         await session.commit()
-
-    asyncio.create_task(_memory_maintenance_loop())
 
     yield
     logger.info("Shutting down %s", settings.app_name)
@@ -151,9 +122,7 @@ async def request_context_middleware(request: Request, call_next):
         reset_request_id(token)
 
 
-# Register routers
-app.include_router(chat.router)
-app.include_router(chat_sessions.router)
+# Register routers (finance only — chat/memory/AI moved to the Chip project)
 app.include_router(accounts.router)
 app.include_router(categories.router)
 app.include_router(transactions.router)
@@ -164,15 +133,30 @@ app.include_router(investments.router)
 app.include_router(dashboard.router)
 app.include_router(reports.router)
 app.include_router(settings_router.router)
-app.include_router(memory.router)
-app.include_router(onboard.router)
-app.include_router(digest.router)
 
 
 @app.get("/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
+@app.get("/health/live")
+async def health_live() -> dict[str, str]:
+    """Liveness: is the process responsive? No dependencies — checking the DB
+    here would turn a transient DB blip into a mass pod-restart cascade.
+    """
     return {"status": "ok", "service": settings.app_name}
+
+
+@app.get("/health/ready")
+async def health_ready(db: AsyncSession = Depends(get_db)) -> dict[str, str]:
+    """Readiness: should this pod receive traffic? Checks the critical
+    dependency (the database). The LLM is a hosted API with no in-process model
+    to warm, so DB connectivity is the only gate. Returns 503 on failure so the
+    load balancer drains this pod without restarting it.
+    """
+    try:
+        await db.execute(text("SELECT 1"))
+    except Exception as exc:
+        logger.warning("Readiness check failed: %s", exc)
+        raise HTTPException(status_code=503, detail="database unavailable") from exc
+    return {"status": "ready", "service": settings.app_name}
 
 
 def _mask_db_url(url: str) -> str:

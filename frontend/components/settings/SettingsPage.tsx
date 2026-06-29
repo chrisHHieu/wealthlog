@@ -4,12 +4,12 @@ import React, { useState, useEffect } from 'react'
 import { PageTransition } from '@/components/ui/PageTransition'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Portal } from '@/components/ui/Portal'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   Save, Trash2, Plus, Edit2, Moon, Sun, Brain,
-  FileText, Tag, Info, User, Palette, Shield,
-  RefreshCw, CheckCircle, ChevronRight, Sparkles, Filter,
+  Tag, Info, User, Palette, Shield,
+  CheckCircle, ChevronRight, Filter,
   AlertTriangle,
 } from 'lucide-react'
 import { useToast } from '@/components/ui/toaster'
@@ -25,17 +25,13 @@ interface Category {
   id: string; name: string; icon: string; color: string
   type: string; budgetGroup?: string | null; isDefault: boolean
 }
-interface Digest {
-  id: string; content: string; generatedForMonth: string; createdAt: string
-}
 
-type SectionId = 'profile' | 'appearance' | 'memory' | 'digest' | 'categories' | 'about'
+type SectionId = 'profile' | 'appearance' | 'memory' | 'categories' | 'about'
 
 const SECTIONS: { id: SectionId; label: string; icon: React.ElementType }[] = [
   { id: 'profile',    label: 'Profile',        icon: User },
   { id: 'appearance', label: 'Appearance',     icon: Palette },
   { id: 'memory',     label: 'AI Memory',      icon: Brain },
-  { id: 'digest',     label: 'Monthly digest', icon: FileText },
   { id: 'categories', label: 'Category',       icon: Tag },
   { id: 'about',      label: 'About',          icon: Info },
 ]
@@ -81,36 +77,6 @@ function ImportanceDots({ value }: { value: number }) {
           background: i < value ? 'var(--accent-green)' : 'var(--surface-border)' }} />
       ))}
     </span>
-  )
-}
-
-// ── Digest renderer ───────────────────────────────────────────────────────────
-
-function DigestContent({ content }: { content: string }) {
-  const parts = content.split(/\n(?=## )/)
-  return (
-    <div style={{ display:'flex', flexDirection:'column', gap:20 }}>
-      {parts.map((block, i) => {
-        const lines = block.split('\n')
-        const isHeader = lines[0].startsWith('## ')
-        const title = isHeader ? lines[0].replace('## ','') : null
-        const body = isHeader ? lines.slice(1).join('\n').trim() : block.trim()
-        return (
-          <div key={i}>
-            {title && (
-              <div style={{ fontSize:13, fontWeight:700, color:'var(--text-primary)',
-                borderBottom:'1px solid var(--surface-border)', paddingBottom:6, marginBottom:8 }}>
-                {title}
-              </div>
-            )}
-            <div style={{ fontSize:13, color:'var(--text-secondary)', lineHeight:1.8,
-              whiteSpace:'pre-wrap' }}>
-              {body}
-            </div>
-          </div>
-        )
-      })}
-    </div>
   )
 }
 
@@ -160,22 +126,9 @@ export function SettingsPage() {
     queryKey: queryKeys.categories(),
     queryFn: () => apiGet<Category[]>('/api/categories'),
   })
-  const { data: latestDigest, isLoading: digestLoading } = useQuery<Digest|null>({
-    queryKey: queryKeys.digest,
-    queryFn: () => apiGet<Digest|null>('/api/digest/latest'),
-  })
   const { data: facts = [], isLoading: factsLoading } = useMemoryFacts()
   const deleteFact = useDeleteFact()
   const verifyFact = useVerifyFact()
-
-  const generateDigest = useMutation({
-    mutationFn: () => apiJson('/api/digest/generate',{method:'POST'}),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: queryKeys.digest })
-      toast('New digest generated')
-    },
-    onError: () => toast('Unable to generate digest - please try again later'),
-  })
 
   useEffect(() => {
     if (settings?.userName) setUserName(settings.userName)
@@ -391,57 +344,6 @@ export function SettingsPage() {
     )
   }
 
-  function renderDigest() {
-    const isGenerating = generateDigest.isPending
-    return (
-      <div className="settings-section">
-        <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:12 }}>
-          <SectionHeader icon={FileText} title="Monthly digest"
-            subtitle="AI summarizes your finances and suggests actions" />
-          <button onClick={() => generateDigest.mutate()} disabled={isGenerating}
-            className="btn btn-primary btn-sm"
-            style={{ flexShrink:0, whiteSpace:'nowrap' }}>
-            {isGenerating
-              ? <><RefreshCw size={13} style={{ animation:'spin 1s linear infinite' }} /> Generating...</>
-              : <><Sparkles size={13} /> Generate new digest</>}
-          </button>
-        </div>
-
-        {isGenerating && (
-          <div style={{ background:'var(--surface)', border:'1px solid var(--surface-border)', borderRadius:12,
-            padding:24, textAlign:'center', color:'var(--text-secondary)', fontSize:13 }}>
-            <RefreshCw size={20} style={{ animation:'spin 1s linear infinite', display:'block', margin:'0 auto 8px' }} />
-            AI is analyzing your financial data... (5-15 seconds)
-          </div>
-        )}
-
-        {!isGenerating && !latestDigest && !digestLoading && (
-          <div style={{ textAlign:'center', padding:48, color:'var(--text-secondary)',
-            border:'1px dashed var(--surface-border)', borderRadius:12, fontSize:13 }}>
-            <FileText size={28} style={{ opacity:0.25, display:'block', margin:'0 auto 10px' }} />
-            No digests yet. Click &quot;Generate new digest&quot; to get started.
-          </div>
-        )}
-
-        {latestDigest && !isGenerating && (
-          <div style={{ background:'var(--surface)', border:'1px solid var(--surface-border)', borderRadius:12, padding:24 }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20,
-              paddingBottom:14, borderBottom:'1px solid var(--surface-border)' }}>
-              <div>
-                <div style={{ fontSize:14, fontWeight:700 }}>Monthly digest {latestDigest.generatedForMonth}</div>
-                <div style={{ fontSize:11, color:'var(--text-secondary)', marginTop:2 }}>
-                  Generated at {new Date(latestDigest.createdAt).toLocaleString('en-US')}
-                </div>
-              </div>
-              <span className="badge badge-green">Latest</span>
-            </div>
-            <DigestContent content={latestDigest.content} />
-          </div>
-        )}
-      </div>
-    )
-  }
-
   function renderCategories() {
     return (
       <div className="settings-section" style={{ gap:20 }}>
@@ -569,7 +471,6 @@ export function SettingsPage() {
     profile: renderProfile,
     appearance: renderAppearance,
     memory: renderMemory,
-    digest: renderDigest,
     categories: renderCategories,
     about: renderAbout,
   }

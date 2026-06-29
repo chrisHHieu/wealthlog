@@ -4,11 +4,13 @@ import { useState, useCallback, useRef, useEffect } from 'react'
 import { API_URL, apiDelete, apiGet, apiJson } from '@/lib/api'
 import { applyChatStreamEvent, consumeChatStream } from '@/lib/chatStream'
 import { rowsToChatMessages, type PersistedMessage } from '@/lib/chatTimeline'
-import type { ChatMessage as ChatMessageType, ChatSession, ModelOption } from '@/types/chat'
+import type { ActionPreview, ActionStatus, ChatMessage as ChatMessageType, ChatSession, ModelOption } from '@/types/chat'
 
 type SessionDetail = {
   messages: PersistedMessage[]
 }
+
+type SessionAction = { id: string; status: ActionStatus; preview?: ActionPreview }
 
 type ModelsResponse = {
   models?: ModelOption[]
@@ -152,7 +154,15 @@ export function useChat(model: string | null) {
     setSessionId(id)
     try {
       const data = await apiGet<SessionDetail>(`/api/chat/sessions/${id}`)
-      setMessages(rowsToChatMessages(data.messages))
+      // Pull the current status of any deferred writes so reloaded confirm
+      // cards show executed/rejected instead of re-prompting.
+      const actions = await apiGet<SessionAction[]>(`/api/chat/sessions/${id}/actions`)
+        .catch(() => [] as SessionAction[])
+      const statusById = Object.fromEntries(actions.map(a => [a.id, a.status]))
+      const previewById = Object.fromEntries(
+        actions.filter(a => a.preview).map(a => [a.id, a.preview as ActionPreview]),
+      )
+      setMessages(rowsToChatMessages(data.messages, statusById, previewById))
       // Try to resume any in-progress agent run for this session — if the
       // server has nothing live, this is a no-op.
       void resumeStream(id)

@@ -6,14 +6,15 @@ from app.models.category import BudgetGroup, Category, CategoryType
 from app.models.chat import ChatMessage, ChatSession
 from app.models.goal import Goal, GoalContribution, GoalType
 from app.models.investment import Investment, InvestmentType
+from app.models.pending_action import PendingAction
 from app.models.recurring import Frequency, RecurringTransaction
 from app.models.session_summary import SessionSummary
 from app.models.setting import Setting
+from app.models.token_usage import TokenUsage
 from app.models.transaction import Transaction, TransactionType
 from app.models.user_commitment import UserCommitment
 from app.models.user_fact import UserFact
 from app.models.user_model import UserModel
-from app.models.weekly_digest import WeeklyDigest
 
 __all__ = [
     "Account",
@@ -30,13 +31,14 @@ __all__ = [
     "GoalType",
     "Investment",
     "InvestmentType",
+    "PendingAction",
     "RecurringTransaction",
     "SessionSummary",
     "Setting",
+    "TokenUsage",
     "Transaction",
     "TransactionType",
     "UserCommitment",
     "UserFact",
     "UserModel",
-    "WeeklyDigest",
 ]

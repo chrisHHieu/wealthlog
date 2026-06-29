@@ -22,7 +22,21 @@ export type ChatStep =
       input?: Record<string, unknown>
       result?: string
       status: 'running' | 'done' | 'error'
+      /** Set when this was a write deferred for confirmation (see ActionStatus). */
+      pendingActionId?: string
+      actionStatus?: ActionStatus
+      /** Human-readable effect of the deferred write, shown on the confirm card. */
+      preview?: ActionPreview
     }
+
+/** Lifecycle of a deferred financial write awaiting user confirmation. */
+export type ActionStatus = 'pending' | 'executed' | 'rejected' | 'failed'
+
+/** Render-ready summary of what a deferred write will do (resolves UUIDs, shows diffs). */
+export interface ActionPreview {
+  summary: string
+  items: { label: string; detail?: string }[]
+}
 
 export interface ChatMessage {
   id: string

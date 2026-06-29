@@ -52,7 +52,7 @@ async def test_consolidation_skipped_when_under_threshold(db: AsyncSession):
 
     haiku = _haiku_returning([])
     with _patch_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=haiku), \
+         patch("app.ai.memory.facts.client_factory", return_value=haiku), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = "key"
         s.user_fact_consolidation_threshold = 100
@@ -74,7 +74,7 @@ async def test_consolidation_skipped_when_no_api_key(db: AsyncSession):
 
     haiku = _haiku_returning([])
     with _patch_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=haiku), \
+         patch("app.ai.memory.facts.client_factory", return_value=haiku), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = ""
         s.user_fact_consolidation_threshold = 100
@@ -246,7 +246,7 @@ async def test_consolidation_reduces_count_when_haiku_proposes_merges(db: AsyncS
     with _patch_session(db), \
          patch("app.ai.memory.facts._load_existing_for_review",
                AsyncMock(return_value=fake_existing)), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=haiku), \
+         patch("app.ai.memory.facts.client_factory", return_value=haiku), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = "key"
         s.user_fact_consolidation_threshold = 100
@@ -271,7 +271,7 @@ async def test_consolidation_idempotent_after_count_drops_below_threshold(db: As
 
     haiku = _haiku_returning([])
     with _patch_session(db), \
-         patch("app.ai.memory.facts.anthropic.AsyncAnthropic", return_value=haiku), \
+         patch("app.ai.memory.facts.client_factory", return_value=haiku), \
          patch("app.ai.memory.facts.settings") as s:
         s.anthropic_api_key = "key"
         s.user_fact_consolidation_threshold = 100

@@ -1,5 +1,5 @@
 import type { Dispatch, SetStateAction } from 'react'
-import type { ChatMessage } from '@/types/chat'
+import type { ActionPreview, ChatMessage } from '@/types/chat'
 
 type StreamData = Record<string, unknown>
 type SetMessages = Dispatch<SetStateAction<ChatMessage[]>>
@@ -116,8 +116,28 @@ export function applyChatStreamEvent(
             ...step,
             status: data.is_error ? 'error' as const : 'done' as const,
             result: data.result as string,
+            // A deferred financial write: surface a confirmation card.
+            ...(data.pending_action_id
+              ? {
+                pendingActionId: data.pending_action_id as string,
+                actionStatus: 'pending' as const,
+                preview: (data.preview as ActionPreview | undefined) ?? undefined,
+              }
+              : {}),
           }
           : step
+      ),
+    }))
+  } else if (eventType === 'error') {
+    // Mid-stream agent failure: settle the message with an error so the user
+    // sees it (and can retry) instead of a silently hung, empty bubble.
+    setMessages(prev => prev.map(message => message.id !== aiId ? message : {
+      ...message,
+      isStreaming: false,
+      error: true,
+      content: message.content || 'Sorry, something went wrong. Please try again.',
+      steps: (message.steps || []).map(step =>
+        'streaming' in step && step.streaming ? { ...step, streaming: false } : step
       ),
     }))
   } else if (eventType === 'done') {

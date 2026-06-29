@@ -56,12 +56,11 @@ def _run_patches(client: AsyncMock, api_key: str = "key"):
     settings_patch = patch("app.ai.memory.dreaming.settings")
     patches = [
         settings_patch,
-        patch("app.ai.memory.dreaming.anthropic.AsyncAnthropic", return_value=client),
+        patch("app.ai.memory.dreaming.get_client", return_value=client),
         patch(
             "app.ai.memory.dreaming.get_structured_model",
             AsyncMock(return_value="claude-haiku-4-5-20251001"),
         ),
-        patch("app.ai.memory.dreaming.resolve_client_kwargs", lambda model: {}),
         patch(
             "app.ai.memory.dreaming.execute_tool",
             AsyncMock(return_value=("[mock financial data]", False)),

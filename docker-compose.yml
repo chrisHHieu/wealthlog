@@ -30,6 +30,7 @@ services:
       # ── AI Provider ───────────────────────────────────────────────────────
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
       # ── Agent model ───────────────────────────────────────────────────────
       AGENT_MODEL: ${AGENT_MODEL:-claude-sonnet-4-6}
       AGENT_MAX_TOKENS: ${AGENT_MAX_TOKENS:-8000}
@@ -40,12 +41,36 @@ services:
       SESSION_SUMMARY_MODEL: ${SESSION_SUMMARY_MODEL:-claude-haiku-4-5-20251001}
       USER_MODEL_SYNTHESIS_MODEL: ${USER_MODEL_SYNTHESIS_MODEL:-claude-sonnet-4-6}
       # ── Context window ────────────────────────────────────────────────────
-      AGENT_TOOL_RESULT_MAX_CHARS: ${AGENT_TOOL_RESULT_MAX_CHARS:-3000}
+      AGENT_TOOL_RESULT_MAX_CHARS: ${AGENT_TOOL_RESULT_MAX_CHARS:-32000}
       AGENT_REVIEW_CADENCE: ${AGENT_REVIEW_CADENCE:-6}
       MCP_HOST: ${MCP_HOST:-0.0.0.0}
       MCP_PORT: ${MCP_PORT:-8002}
+      # Agent-as-MCP-Host: empty = in-process tools (default); set to the mcp
+      # service URL to route tools over the wire (SSE) with the shared token.
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-mcp-token}
+      MCP_SERVER_URL: ${MCP_SERVER_URL:-}
     ports:
       - "8001:8000"
+
+  # WealthLog tools as a standalone MCP server (SSE + bearer auth). Same image as
+  # backend, different entrypoint. The agent connects here when MCP_SERVER_URL is
+  # set — a preview of the eventual Chip/WealthLog split.
+  mcp:
+    build:
+      context: ./backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["uv", "run", "uvicorn", "app.ai.mcp.sse:app", "--host", "0.0.0.0", "--port", "8002"]
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-wealthlog}:${POSTGRES_PASSWORD:-wealthlog2026}@db:5432/${POSTGRES_DB:-wealthlog}
+      TAVILY_API_KEY: ${TAVILY_API_KEY:-}
+      MCP_HOST: 0.0.0.0
+      MCP_PORT: 8002
+      MCP_AUTH_TOKEN: ${MCP_AUTH_TOKEN:-dev-mcp-token}
+    ports:
+      - "8002:8002"
 
   frontend:
     build:

@@ -131,13 +131,17 @@ def register(mcp: FastMCP) -> None:
 
     @mcp.tool()
     async def get_top_expenses(month: str | None = None, limit: int = 10) -> str:
-        """Top expense transactions for the month. Month format: YYYY-MM."""
+        """Top expense transactions for the month. Month format: YYYY-MM.
+
+        Each row includes its `id` — pass that exact id to update/delete tools to
+        edit or remove the transaction. Never invent an id."""
         m = month or current_month()
         start, end = month_range(m)
         async with get_session() as db:
             rows = (
                 await db.execute(
                     select(
+                        Transaction.id,
                         Transaction.amount,
                         Transaction.description,
                         Transaction.date,
@@ -164,7 +168,9 @@ def register(mcp: FastMCP) -> None:
             for i, r in enumerate(rows, 1):
                 cat = f"{r.cat_icon} {r.cat_name}" if r.cat_name else "Uncategorized"
                 desc = r.description or ""
-                lines.append(f"{i}. {r.amount:,.0f} VND | {cat} | {desc} [{r.date}]")
+                lines.append(
+                    f"{i}. {r.amount:,.0f} VND | {cat} | {desc} [{r.date}] (id: {r.id})"
+                )
             return "\n".join(lines)
 
     @mcp.tool()
@@ -211,25 +217,3 @@ def register(mcp: FastMCP) -> None:
                     f"{r.amount:,.0f} VND ({t}) | {f} | {cat}"
                 )
             return "\n".join(lines)
-
-    @mcp.tool()
-    async def get_monthly_digest() -> str:
-        """Return the latest AI-generated monthly financial digest.
-
-        The digest contains an overall financial summary, budget status, goal
-        progress, investment overview, and 3 recommended actions.
-
-        NOTE: Returns CACHED data from the last generation — may be days or weeks
-        old. Use live tools (get_financial_summary, get_budget_status, get_goals)
-        for current numbers. Call this only when the user explicitly asks for the
-        monthly report, a general overview, or what actions to take this month.
-        """
-        from app.ai.digest import get_latest_digest  # lazy — avoids circular import
-        digest = await get_latest_digest()
-        if not digest:
-            return "Chưa có báo cáo tháng nào. Hãy tạo báo cáo tháng trong phần Cài đặt → Báo cáo tháng."
-        return (
-            f"[Báo cáo tháng {digest.generated_for_month} — "
-            f"tạo lúc {digest.created_at.strftime('%d/%m/%Y %H:%M')}]\n\n"
-            + digest.content
-        )

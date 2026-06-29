@@ -6,7 +6,7 @@ tokenizes by word boundary so column names containing keyword substrings
 no longer poison the validator.
 """
 
-from app.ai.mcp.tools.discovery import _is_read_only
+from app.ai.mcp.tools.discovery import _fan_out_risk, _is_read_only
 
 # ── Legit SELECTs (must pass) ──────────────────────────────────────────────
 
@@ -98,3 +98,42 @@ def test_empty_sql_blocked():
 def test_non_select_first_word_blocked():
     """Even a benign-looking command like EXPLAIN is rejected — only SELECT/WITH allowed."""
     assert _is_read_only("EXPLAIN SELECT * FROM foo") is False
+
+
+# ── Fan-out (cartesian) risk detection ─────────────────────────────────────
+
+
+def test_fan_out_flagged_for_join_plus_aggregate():
+    """JOIN two fact tables and SUM without a CTE — the inflated-sum trap."""
+    sql = (
+        "SELECT SUM(t.amount) FROM transactions t "
+        "JOIN budgets b ON b.category_id = t.category_id"
+    )
+    assert _fan_out_risk(sql) is True
+
+
+def test_fan_out_not_flagged_without_aggregate():
+    """A plain JOIN that returns rows (no aggregate) can't be inflated into a wrong sum."""
+    sql = "SELECT t.id, c.name FROM transactions t JOIN categories c ON c.id = t.category_id"
+    assert _fan_out_risk(sql) is False
+
+
+def test_fan_out_not_flagged_without_join():
+    """Single-table aggregation has nothing to fan out against."""
+    sql = "SELECT SUM(amount) FROM transactions"
+    assert _fan_out_risk(sql) is False
+
+
+def test_fan_out_not_flagged_when_cte_used():
+    """A CTE is assumed to isolate aggregates — the recommended safe shape."""
+    sql = (
+        "WITH tx AS (SELECT category_id, SUM(amount) s FROM transactions GROUP BY 1) "
+        "SELECT b.name, tx.s FROM budgets b JOIN tx ON tx.category_id = b.category_id"
+    )
+    assert _fan_out_risk(sql) is False
+
+
+def test_fan_out_ignores_keyword_in_comment():
+    """A JOIN/SUM mentioned only in a comment must not trip the detector."""
+    sql = "-- no JOIN, no SUM here\nSELECT amount FROM transactions"
+    assert _fan_out_risk(sql) is False

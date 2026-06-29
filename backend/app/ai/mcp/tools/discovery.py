@@ -76,6 +76,37 @@ def _blocked_table_refs(sql: str) -> set[str]:
     return set(_WORD_RE.findall(normalized)) & _BLOCKED_TABLES
 
 
+# Aggregate functions whose result is silently inflated by a fan-out (cartesian)
+# JOIN. SUM/COUNT/AVG over a row set that a second one-to-many JOIN multiplied
+# returns wrong money numbers without raising any error — the dangerous case.
+_AGG_RE = re.compile(r"\b(SUM|COUNT|AVG|MIN|MAX|TOTAL)\s*\(", re.I)
+_JOIN_RE = re.compile(r"\bJOIN\b", re.I)
+_CTE_RE = re.compile(r"\bWITH\b", re.I)
+
+
+def _fan_out_risk(sql: str) -> bool:
+    """Flag a JOIN + aggregate query that does not isolate aggregates in a CTE.
+
+    Deliberately coarse — it only signals a *possible* fan-out so the agent can
+    double-check; the caller warns rather than blocks, since plenty of
+    JOIN+aggregate queries (aggregating only the many-side against a lookup
+    table) are perfectly correct. A query already using a CTE (``WITH``) is
+    assumed to have isolated its aggregates and is left alone.
+    """
+    stripped = _strip_comments(sql)
+    if _CTE_RE.search(stripped):
+        return False
+    return bool(_JOIN_RE.search(stripped) and _AGG_RE.search(stripped))
+
+
+_FAN_OUT_WARNING = (
+    "[!] Possible fan-out: this query JOINs and aggregates (SUM/COUNT/AVG…) "
+    "without a CTE. If it joins two one-to-many tables, the aggregate may be "
+    "silently inflated (double-counted). Verify against a single-table count, "
+    "or isolate each aggregate in its own CTE before trusting these numbers."
+)
+
+
 async def build_schema_summary() -> str:
     """Build rich schema description (tables, columns, enums, FKs, samples).
 
@@ -183,6 +214,15 @@ def _hint_for_sql_error(err: str) -> str | None:
 
 def register(mcp: FastMCP) -> None:
     @mcp.tool()
+    async def get_database_schema() -> str:
+        """Return the live DB schema (tables, columns, enums, FKs, sample values).
+
+        The schema is already preloaded into the system prompt, so you rarely
+        need this. Call it only to re-fetch the structure mid-session — e.g.
+        after a migration changes tables — before writing query_database SQL."""
+        return await build_schema_summary()
+
+    @mcp.tool()
     async def query_database(sql: str) -> str:
         """Run a read-only SELECT on PostgreSQL 16 (default LIMIT 20 rows).
         Use when the specialized tools can't answer the question.
@@ -191,7 +231,11 @@ def register(mcp: FastMCP) -> None:
         Postgres quirks:
         - Money columns (amount, target_amount…) are double precision.
         - ROUND(double, int) does NOT exist → cast: ROUND(expr::numeric, 2).
-        - Avoid format/round in SQL; return raw numbers and format in the reply."""
+        - Avoid format/round in SQL; return raw numbers and format in the reply.
+
+        Fan-out warning: when you JOIN two one-to-many tables AND aggregate
+        (SUM/COUNT/AVG), the aggregate is silently inflated. Isolate each
+        aggregate in its own CTE (WITH …) before joining the results."""
         if not _is_read_only(sql):
             return "Error: only SELECT (read-only) statements are allowed."
         if blocked := _blocked_table_refs(sql):
@@ -218,7 +262,10 @@ def register(mcp: FastMCP) -> None:
                 for row in rows:
                     lines.append(" | ".join(str(v) for v in row))
 
-                return f"Results ({len(rows)} rows):\n" + "\n".join(lines)
+                out = f"Results ({len(rows)} rows):\n" + "\n".join(lines)
+                if _fan_out_risk(normalized):
+                    out += f"\n\n{_FAN_OUT_WARNING}"
+                return out
             except Exception as e:
                 err_msg = str(e)
                 hint = _hint_for_sql_error(err_msg)

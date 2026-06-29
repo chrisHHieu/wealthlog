@@ -9,7 +9,6 @@ from app.ai.mcp.tools import (
     discovery,
     goals,
     investments,
-    memory,
     reports,
     transactions,
 )
@@ -36,7 +35,6 @@ goals.register(mcp)
 investments.register(mcp)
 reports.register(mcp)
 discovery.register(mcp)
-memory.register(mcp)
 
 # Register resources & prompts
 resources.register(mcp)
